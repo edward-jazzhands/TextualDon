@@ -1,0 +1,167 @@
+.fullscreen {
+    align: center middle;
+    content-align: center middle;
+    width: 100%;
+    height: 100%;
+    &.container {
+        width: 80%;
+        height: auto;
+    }
+    &.bordered_red {
+        border: heavy red;
+    }
+    &.bordered_primary {
+        border: outer $primary;
+    }
+}
+
+NotImplementedScreen {
+    content-align: center middle;
+    align: center middle;
+}
+
+#imgview_label {
+    width: auto;
+    height: 1fr;
+    content-align: center middle;
+    align: center middle;
+    padding: 0 2 0 2;
+}
+
+#wsl_link_button {
+    align: center middle;
+    content-align: center middle;
+    height: 1;
+    width: 1fr;
+    padding: 0 2 0 2;
+    margin: 0;
+}
+
+.modal_screen {
+    align: center middle;
+    content-align: center middle;
+}
+
+.screen_container {
+    align: center middle;
+    content-align: center middle;
+    width: 40;
+    height: auto;
+    max-height: 90%;
+    border: outer $primary;
+    margin: 4 0 0 0;
+    &.wide {
+        width: 48;
+    }
+    &.ultrawide {
+        width: 60;
+    }
+    &.help {
+        width: 1fr;
+        height: 5;
+        margin: 0 0 2 0;
+        dock: bottom;
+        border: solid $accent;
+        &.error {
+            margin: 0;
+        }
+    }
+    &.toot_options {
+        width: 1fr;
+        height: 5;
+        margin: 0 0 2 0;
+        dock: bottom;
+        border: solid $accent;
+    }
+}
+
+.screen_label {
+    width: 1fr;
+    height: auto;
+    content-align: center middle;
+    align: center middle;
+    padding: 1 2 0 2;
+    &.left {
+        align: left middle;
+        content-align: left middle;
+        padding: 1 3 0 3;
+    }
+}
+
+.screen_button {
+    height: auto;
+    width: 1fr;
+    padding: 0 2 0 2;
+    align: center middle;
+    content-align: center middle;
+    &.tall {
+        height: 3;
+    }
+    &.short {
+        height: 1;
+    }
+}
+
+.screen_buttonbar {
+    align: center middle;
+    content-align: center middle;
+    height: 3;
+    width: 1fr;
+    dock: bottom;
+    &.tall {
+        height: 4;
+    }
+}
+
+# this is only for the SimpleButtons
+.popup_button {
+    align: center middle;
+    content-align: center middle;
+    height: 1fr;
+    max-width: 25;
+    width: 1fr;
+    margin: 0 1 0 1;
+    &.padding {
+        padding: 0 2 0 2;
+    }
+    &.triplet {
+        max-width: 31%;
+    }
+}
+
+.link_box {
+    align: center middle;
+    content-align: center middle;
+    height: auto;
+    width: 1fr;
+    padding: 0;
+    margin: 0 0 1 0;
+}
+
+.screen_collapsible {
+    width: 1fr;
+    height: 10;
+    content-align: center middle;
+    align: center middle;
+    padding: 0;
+    margin: 0 0 1 0;
+    border: wide $accent;
+}
+
+#error_scroll {
+    width: 1fr;
+    height: auto;
+    max-height: 10;
+    align: left top;
+    padding: 0 0 1 0;
+    margin: 0;
+}
+
+#error_box {
+    width: 1fr;
+    height: auto;
+    # max-height: 1fr;
+    min-height: 8;
+    # max-height: 50%;
+    # min-height: 15;
+}

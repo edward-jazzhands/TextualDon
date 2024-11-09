@@ -1,0 +1,12 @@
+/.venv/
+*.pyc
+*__pycache__/
+*cache
+/build/
+/dist/
+links.txt
+/sandbox/
+*.secret
+count_lines.sh
+*CodeRunner*
+themes.txt

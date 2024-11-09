@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "textualdon"
+version = "0.1.0"
+description = "A Mastodon client built with the Textual framework"
+authors = ["edward-jazzhands <ed.jazzhands@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+include = [
+    "SQL/*.sql"
+]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+textual = {extras = ["syntax"], version = "^1.0.0"}
+beautifulsoup4 = "^4.12.3"
+mastodon-py = "^1.8.1"
+textual-dev = "^1.6.1"
+platformdirs = "^4.3.6"
+tzlocal = "^5.2"
+clipman = "^3.3.1"
+textual-imageview = { git = "https://github.com/edward-jazzhands/textual-imageview.git", branch = "main" }
+textual-pyfiglet = "^0.5.5"
+textual-spinbox = "^0.7.0"
+humanize = "^4.11.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+# set entry script:
+[tool.poetry.scripts]
+textualdon = "textualdon.__main__:run"

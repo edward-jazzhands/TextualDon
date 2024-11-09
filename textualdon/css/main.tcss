@@ -1,0 +1,39 @@
+# Pseudo-classes:
+# 'ansi', 'blur', 'can-focus', 'dark', 'disabled', 'enabled', 
+# 'focus', 'focus-within', 'hover', 'inline', 'light', 'nocolor'
+
+#main_switcher {
+    width: 1fr;
+    # min-width: 50;
+    height: auto;
+    align: center middle;
+}
+
+.main_scroll {
+    height: 1fr;
+    width: 1fr;
+    &.cross {
+        hatch: cross $surface;
+    }
+    &.left {
+        hatch: left $surface;
+    }
+    &.right {
+        hatch: right $surface;
+    }
+}
+
+#main_tootbox {
+    padding: 0 5 0 5;
+}
+
+#footer_label {
+    width: 20;
+    height: 1;
+    align: center middle;
+    content-align: center middle;
+
+}
+
+
+
