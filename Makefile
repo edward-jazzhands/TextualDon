@@ -14,6 +14,8 @@ help:
 	@echo "build    - clean then poetry build"
 	@echo "publish  - build then poetry publish"
 	@echo "del-env  - delete the virtual environment and lock file"
+	@echo "del-secrets - delete all .secret files"
+	@echo "tmux     - run tmux script"
 	@echo ""
 
 install:
@@ -39,13 +41,7 @@ console:
 # I turn off the base EVENT, SYSTEM, and WORKER messages to avoid
 # cluttering the console.
 # All workers in the app send custom log messages that are more concise.
-
-
-db:
-	uvx harlequin -a sqlite textualdon/textualdon.db
-
-db2:
-	litecli textualdon.db
+# To make messages even MORE concise you can add '-x DEBUG' to turn off debug messages.
 
 clean: del-secrets
 	rm -rf build dist
@@ -64,14 +60,8 @@ del-env:
 del-secrets:
 	find . -name "*.secret" -delete
 
-count:
-	bash count_lines.sh textualdon
-
-
-tmux-permissions:
-	chmod +x tmux.sh
-
 # This will run the tmux script.
 # see tmux.sh for more details.
-tmux: tmux-permissions
+tmux:
+	chmod +x tmux.sh
 	./tmux.sh
