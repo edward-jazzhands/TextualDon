@@ -16,7 +16,7 @@ from rich.text import Text
 
 # Textual imports
 from textual import on, work
-from textual.worker import Worker, WorkerCancelled
+from textual.worker import Worker, WorkerCancelled, WorkerState
 from textual.binding import Binding
 from textual.containers import Container, Horizontal
 from textual.widgets import Static
@@ -24,8 +24,7 @@ from textual.widgets import Input
 
 # TextualDon imports
 from textualdon.messages import (
-    UpdateBannerMessage,
-    OnlineStatus,
+    SuperNotify,
     LoginStatus,
     LoginComplete,
     CallbackSuccess,
@@ -76,6 +75,7 @@ class OAuthWidget(Container):
         self.saved_users_manager = cast(SavedUsersManager, self.query_one(SavedUsersManager))
         self.login_status = cast(Static, self.query_one("#login_status"))
         self.login_input  = cast(Input, self.query_one("#instance_url"))
+        self.query_one("#connect_button").can_focus = False
 
         # NOTE: app data only needs to be created once per Mastodon server instance.
 
@@ -220,10 +220,9 @@ class OAuthWidget(Container):
             with self.app.capture_exceptions():
                 await self.login_stage5(instance_url, access_token=stage4_result)
 
-    # Stages 1-3 are all in the group 'login', and exclusive=True.
-    # So only one of the stages should ever be allowed to run at a time.
-    # Restarting the process will cancel any currently running stage and start over.
-    # But I believe this is just a safety net, and it shouldn't ever be necessary.
+    # Stages 1 and 2 are both in the group 'login', and exclusive=True.
+    # it probably doesn't matter much but it might help prevent it being
+    # run twice at the same time for some reason.
 
     @work(thread=True, exclusive=True, exit_on_error=False, group="login")
     def login_stage1(self, instance_url: str, redirect_uri: str) -> tuple[str, str]:
@@ -272,11 +271,12 @@ class OAuthWidget(Container):
             raise ValueError("Client ID or Client Secret not found.")
     
         try:
-            mastodon = Mastodon(              # Here we create the Mastodon object that will be used
+            mastodon = Mastodon(              #~ Here we create the Mastodon object that will be used,
                 client_id = client_id,          # But only if its the first time logging in to this server.
-                client_secret= client_secret,
+                client_secret= client_secret,       # Following times are handled in savedusers.py
                 api_base_url = instance_url,
-            )
+                version_check_mode='none',
+            )     
         except Exception as e:
             raise e                                       
 
@@ -373,10 +373,12 @@ class OAuthWidget(Container):
         # But since this is a client-side app, we can assume it is unique for our purposes.
         # The probability of a user having the same ID number on two instances is astronomically low.
 
-        self.post_message(OnlineStatus(username, instance_url))
-        self.post_message(UpdateBannerMessage(f"Logged in as {display_name} (@{username})"))
-        self.notify(f"Logged in as @{username}")
-        self.post_message(LoginStatus(f"Logged in as {display_name} (@{username}) on {instance_url}"))
+        self.post_message(SuperNotify(f"Logged in as {display_name} (@{username})"))
+        self.post_message(LoginStatus(
+            statusbar=username,
+            instance_url=instance_url,
+            loginpage_message=f"Logged in as {display_name} (@{username}) on {instance_url}",
+        ))
 
         self.log(f"Logged in successfully to {username}, user ID: {user_id}")
 
@@ -443,16 +445,16 @@ class OAuthWidget(Container):
     def worker_state_changed(self, event: Worker.StateChanged) -> None:
 
         self.log.debug(Text(
-                f"Worker.state: {event.worker.state.name}\n"
+                f"Worker state: {event.state}\n"
                 f"Worker.name: {event.worker.name}",
                 style="cyan"
         ))
 
-        if event.worker.state.name == 'SUCCESS':
+        if event.state == WorkerState.SUCCESS:
             self.log(Text(f"Worker {event.worker.name} completed successfully", style="green"))
-        elif event.worker.state.name == 'ERROR':
+        elif event.state == WorkerState.ERROR:
             self.log.error(Text(f"Worker {event.worker.name} encountered an error", style="red"))
-        elif event.worker.state.name == 'CANCELLED':
+        elif event.state == WorkerState.CANCELLED:
             self.log(Text(f"Worker {event.worker.name} was cancelled", style="yellow"))
 
 

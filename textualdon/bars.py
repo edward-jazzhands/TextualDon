@@ -12,15 +12,20 @@ from rich.emoji import Emoji
 
 # Textual imports
 from textual import on
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal
 from textual.widgets import Label, Static
 
 # Textualdon imports
 from textualdon.simplebutton import SimpleButton
 from textualdon.messages import SwitchMainContent
 
+class TopBarType(Horizontal):
 
-class TopBarMenu(Horizontal):
+    def on_mount(self):
+        for child in self.children:
+            child.can_focus = False
+
+class TopBarMenu(TopBarType):
 
     def compose(self) -> ComposeResult:
         yield SimpleButton(f"{Emoji('house')}",    id="home",             name="Home",          classes="topbar_button")   
@@ -32,32 +37,23 @@ class TopBarMenu(Horizontal):
         yield SimpleButton(f"{Emoji('star2')}",    id="favorites",        name="Favorites",     classes="topbar_button")      
         yield SimpleButton(f"{Emoji('scroll')}",   id="lists",            name="Lists",         classes="topbar_button")
 
-    def on_mount(self):
-        for child in self.children:
-            child.can_focus = False
-
-class StatusWidget(Horizontal):
+class StatusWidget(TopBarType):
 
     def compose(self) -> ComposeResult:
         yield Static("Status: Offline", id="online_status")
-        yield SimpleButton("≡", id="login_page", name="Settings", classes="topbar_button status")       # Settings
+        yield SimpleButton("≡", id="login_page", name="Settings", classes="topbar_button status")
 
-    def on_mount(self):
-        for child in self.children:
-            child.can_focus = False
-
-class TopBar(Horizontal):
+class TopBar(TopBarType):
 
     def compose(self) -> ComposeResult:
         yield SimpleButton(f"{Emoji('arrow_backward')}", id="back", name="Back", classes="topbar_button back")
         yield TopBarMenu()
-        yield Label("", id="topbar_label")
+        yield Label(id="topbar_label")
         yield StatusWidget()
 
     def on_mount(self):
         self.online_status = self.query_one("#online_status")
-        for child in self.children:
-            child.can_focus = False
+        self.topbar_label = self.query_one("#topbar_label")
 
     def update(self, status: str, instance_url: str = None) -> None:
         self.online_status.update(status)
@@ -69,12 +65,13 @@ class TopBar(Horizontal):
 
     @on(SimpleButton.HoverEnter)
     def show_label(self, event: SimpleButton.HoverEnter) -> None:
-        self.app.get_widget_by_id("topbar_label").update(event.button.name)
+        self.topbar_label.update(event.button.name)
 
     @on(SimpleButton.HoverLeave)
     def hide_label(self, event: SimpleButton.HoverLeave) -> None:
-        self.app.get_widget_by_id("topbar_label").update("")
+        self.topbar_label.update("")
 
+    
 
 class BottomBar(Horizontal):
 
@@ -105,7 +102,7 @@ class MessageBarWidget(Horizontal):
     clear_time = 5       # seconds to clear the message
 
     def compose(self) -> ComposeResult:
-        yield Label("", id="message_widget_text")  # starts empty
+        yield Label(id="message_widget_text")
         Label.update
 
     def on_mount(self):
@@ -113,7 +110,7 @@ class MessageBarWidget(Horizontal):
 
 
     async def update(self, message: str) -> None:
-        """This overrides the normal update.
+        """This overrides the normal update to add the timer.
         Activated by update_message in __init__.py"""
 
         self.message_widget.update(message)
@@ -142,32 +139,32 @@ class SafeModeBar(Horizontal):
 
         
 
-class LeftBar(Vertical):
+# class LeftBar(Vertical):
 
-    def compose(self) -> ComposeResult:
-        yield Static("", id='leftbar_content')
+#     def compose(self) -> ComposeResult:
+#         yield Static("", id='leftbar_content')
 
-    def on_mount(self):
-        # user_db = self.app.tinydb.all()
-        leftbar_content = self.query_one("#leftbar_content")
-        for item in self.app.tinydb:
-            username = item['username']
-            instance_url = item['instance_url']
-            leftbar_content.update(f"{username}\n{instance_url}")
+#     def on_mount(self):
+#         # user_db = self.app.tinydb.all()
+#         leftbar_content = self.query_one("#leftbar_content")
+#         for item in self.app.tinydb:
+#             username = item['username']
+#             instance_url = item['instance_url']
+#             leftbar_content.update(f"{username}\n{instance_url}")
 
-    def hide_if_too_small(self, width):
-        if width < 120:  # For example, hide if the width is less than 80
-            self.display = False  # This hides the widget
-        else:
-            self.display = True   # This shows the widget
+#     def hide_if_too_small(self, width):
+#         if width < 120:  # For example, hide if the width is less than 80
+#             self.display = False  # This hides the widget
+#         else:
+#             self.display = True   # This shows the widget
 
-class RightBar(Vertical):
+# class RightBar(Vertical):
 
-    def compose(self) -> ComposeResult:
-        yield Static("")
+#     def compose(self) -> ComposeResult:
+#         yield Static("")
 
-    def hide_if_too_small(self, width):
-        if width < 120:  # For example, hide if the width is less than 80
-            self.display = False  # This hides the widget
-        else:
-            self.display = True   # This shows the widget
+#     def hide_if_too_small(self, width):
+#         if width < 120:  # For example, hide if the width is less than 80
+#             self.display = False  # This hides the widget
+#         else:
+#             self.display = True   # This shows the widget

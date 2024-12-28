@@ -16,7 +16,7 @@ from textual.widgets import Label, Button
 
 # TextualDon imports
 from textualdon.simplebutton import SimpleButton
-from textualdon.messages import UpdateBannerMessage, ExamineToot, UserPopupMessage
+from textualdon.messages import ExamineToot, UserPopupMessage
 from textualdon.screens import NotImplementedScreen, TextualdonModalScreen
 from textualdon.sql import SQLite
 from textualdon.bs4_parser import BS4Parser
@@ -52,7 +52,9 @@ class TootOptionsScreen(ModalScreen):
         # NOTE: this might seem like kind of a mess, but they have to go in a specific order.
         # So its either this or insert them in the right order, which is more error-prone.
 
-        options_list.append(SimpleButton(   'Copy link to toot to clipboard', id='copy_link_button', classes="screen_button"))
+        if self.toot_widget.toot_content_container.image_on:
+            options_list.append(SimpleButton(    'View image in full size', id='view_image_button', classes="screen_button"))
+        options_list.append(SimpleButton(  'Copy link to toot to clipboard', id='copy_link_button', classes="screen_button"))
         if self.toot_widget.card and self.toot_widget.card['url']:
             options_list.append(SimpleButton("Open mentioned URL / Website.", id="open_url_button", classes="screen_button"))
         if self.toot_widget.in_reply_to_id:
@@ -79,10 +81,13 @@ class TootOptionsScreen(ModalScreen):
     def on_click(self):
         self.dismiss()
 
+    @on(SimpleButton.Pressed, selector="#view_image_button")
+    async def view_image(self) -> None:
+        await self.toot_widget.view_image()
+
     @on(SimpleButton.Pressed, selector="#copy_link_button")
     def copy_link(self) -> None:
         self.app.copy_to_clipboard(self.toot_widget.toot_url)
-        self.post_message(UpdateBannerMessage("Link copied to clipboard."))
 
     @on(SimpleButton.Pressed, selector="#open_url_button")
     def open_url(self) -> None:
@@ -273,7 +278,7 @@ class MuteScreen(TextualdonModalScreen):
 
     @on(Button.Pressed, selector='#close_button')
     def report_close(self):
-        self.action_close_screen()
+        self.action_pop_screen()
 
 
 class BlockScreen(TextualdonModalScreen):
@@ -302,7 +307,7 @@ class BlockScreen(TextualdonModalScreen):
     @on(Button.Pressed, selector='#close_button')
     def report_close(self):
 
-        self.action_close_screen()
+        self.action_pop_screen()
 
 
 class UserPopup(TextualdonModalScreen):
@@ -311,6 +316,8 @@ class UserPopup(TextualdonModalScreen):
     - TootWidget.open_booster_popup
     
     Callback: None (sends UserPopupMessage instead)"""
+
+    controls = "Arrow keys (or tab): navigate | Enter: select | Esc or click anywhere: close"
     
     bs4_parser = BS4Parser()
 
@@ -372,15 +379,16 @@ class UserPopup(TextualdonModalScreen):
             self.follow_button.visible = False
     
     def on_click(self):
-        self.action_close_screen()
+        self.dismiss()
 
     @on(SimpleButton.Pressed, selector='#user_follow_button')
     def follow_user(self):
         self.post_message(UserPopupMessage('follow', self.account, self.relation))
+        self.dismiss()
 
         # NOTE: Message is handled in the main app.
 
     @on(SimpleButton.Pressed, selector='#go_to_profile_button')
     def go_to_profile(self):
         self.post_message(UserPopupMessage('profile', self.account, self.relation))
-    
+        self.dismiss()    

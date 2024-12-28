@@ -17,7 +17,7 @@ from textual.widgets import (
 
 # TextualDon Imports
 from textualdon.simplebutton import SimpleButton
-from textualdon.messages import UpdateBannerMessage, ScrollToWidget
+from textualdon.messages import SuperNotify, ScrollToWidget
 from textualdon.screens import NotImplementedScreen
 from textualdon.messages import SwitchMainContent
 
@@ -202,22 +202,18 @@ class TootBox(Container):
     async def post_toot(self) -> None:
 
         if self.app.safe_mode:
-            self.post_message(UpdateBannerMessage("Safe mode is enabled."))
-            self.notify("Can't post. Safe mode is enabled.")
+            self.post_message(SuperNotify("Please disable safe mode to post."))
             return
-        
         if not self.app.mastodon:
-            self.post_message(UpdateBannerMessage("You're not logged in."))
-            self.notify("You're not logged in.")
+            self.post_message(SuperNotify("You're not logged in."))
             return
-
-        if self.hidden:
+        if self.hidden:     # this should never happen.
             self.log.error("Tried to post toot with box hidden")
             return
         if self.input_box.text == "":
-            self.post_message(UpdateBannerMessage("You can't post an empty toot."))
-            self.notify("You can't post an empty toot.")
+            self.post_message(SuperNotify("You can't post an empty toot."))
             return
+        
         posted_toot = None
         idempotency_key = str(uuid.uuid4())   # good practice. prevents double posting
 
@@ -238,10 +234,7 @@ class TootBox(Container):
                 )
             
         if posted_toot:
-            self.log.debug(posted_toot)
-            self.log("Toot posted successfully.")
-            self.post_message(UpdateBannerMessage("Toot posted successfully."))
-            self.notify("Toot posted successfully.")
+            self.post_message(SuperNotify("Toot posted successfully."))
             self.input_box.text = ""
             if self.toot_widget:    # if this is a reply
                 await self.toot_widget.query_one("#reply_box").remove()

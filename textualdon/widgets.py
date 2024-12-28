@@ -14,11 +14,13 @@ from textual_imageview.viewer import ImageViewer    # takes PIL.Image.Image as o
 
 # Textual imports
 from textual import on, work
+from textual.reactive import reactive
 from textual.dom import NoScreen
-from textual.worker import Worker #, WorkerCancelled, WorkerFailed
+from textual.worker import Worker, WorkerState
 from textual.binding import Binding
 from textual.message import Message
 from textual.containers import Horizontal, Vertical, Container
+from textual.widget import Widget
 from textual.widgets import (
     Sparkline,
     Pretty,
@@ -28,7 +30,7 @@ from textual.widgets import (
 )
 
 # TextualDon imports
-from textualdon.screens import ImageScreen, MessageScreen
+from textualdon.screens import ImageScreen, MessageScreen, NotImplementedScreen
 from textualdon.simplebutton import SimpleButton
 from textualdon.messages import ScrollToWidget
 
@@ -47,9 +49,8 @@ The bar at the bottom of the screen will show you the available commands for wha
 You can see your status in the top right corner of the screen. \
 Hover your mouse over it to see which instance you are connected to (or check this page). \n
 You can also use the command palette (bottom right, or press 'ctrl + p') to read Textual's command list \
-and to change themes. (I tried to make sure TextualDon looks good in most themes.)\n
-If you are using TextualDon over SSH and you want to keep a low profile, you might want to disable \
-images in the settings. \n"""
+and to change themes. (I tried to make sure TextualDon looks good in most themes, and \
+it will remember your theme setting as well.) \n"""
     welcome_text2 = """Note that default link behavior is to open in your browser. \
 You can change this in the settings below. This will be useful for people who cannot \
 open a browser window automatically."""
@@ -112,47 +113,82 @@ screen should save you some time in doing so, assuming it works properly. \n"""
             self.app.sqlite.update_column("settings", "value", "True", "name", "show_welcome_message")
 
 
-class TimelineSelector(Horizontal):
+class TimelineSelector(Widget):
+
+    BINDINGS = [
+        Binding("left", "focus_previous", "Focus left", show=True),
+        Binding("right", "focus_next", "Focus right", show=True),
+    ]
+    # focused_index = reactive(0)     # start on leftmost timeline
 
     class ChangeTimeline(Message):
-        """This message is sent when a timeline is selected in the TimelineSelector widget."""
+        """This message is sent when a timeline is selected in the TimelineSelector widget.
+        This is handled in the page the TimelineSelector is mounted in."""
         def __init__(self, timeline: str) -> None:
             super().__init__()
             self.timeline = timeline
 
-    def __init__(self, options: List[Tuple[str, str]], current: int, **kwargs):
+    def __init__(self, options: List[Tuple[str, str]], **kwargs):
         super().__init__(**kwargs)
         self.options = options
-        self.current = current
+        self.current = 0        # index of the selected timeline
+
+        # NOTE: Every entry in options is a tuple of the display name and id of the timeline.
+        self.buttons_list = [
+            SimpleButton(option[0], id=option[1], index=index, classes="timeline_button") 
+            for index, option in enumerate(self.options)
+        ]
+        self.amt_of_buttons = len(self.buttons_list)
 
     def compose(self) -> ComposeResult:
 
         #~ NOTE: Timeline CSS is in pages.tcss
 
-        with Horizontal(classes="page_box timeline"):
-            for index, option in enumerate(self.options):   
-                yield SimpleButton(option[0], id=option[1], index=index, classes="timeline_button")
+        with Horizontal(id="timeline_container", classes="page_box timeline"):
+            for button in self.buttons_list:
+                yield button
 
     def on_mount(self):
+        timeline_container = self.query_one("#timeline_container")
+        self.buttons = list(timeline_container.query_children().results())
+
         selected = self.query_one(f"#{self.options[self.current][1]}")
         selected.set_classes("timeline_button selected")
 
     @on(SimpleButton.Pressed)
     def switch_timeline(self, event: SimpleButton.Pressed) -> None:
+
         if event.button.index == self.current:
             self.log.debug("Already on this timeline.")
             return
+        
         self.log.debug(f"Switching to {event.button.id}")
-        for option in self.options:
+        for option in self.options:                         # First reset all buttons
             button = self.query_one(f"#{option[1]}")
             button.set_classes("timeline_button")
+
         selected = self.query_one(f"#{event.button.id}")
         selected.set_classes("timeline_button selected")
         self.current = event.button.index
-        self.post_message(self.ChangeTimeline(event.button.id))
+        self.post_message(self.ChangeTimeline(event.button.id))  # Send message to parent page
+
+    def action_focus_previous(self) -> None:
+        if self.buttons[0].has_focus:
+            self.buttons[-1].focus()
+        self.screen.focus_previous()
+
+    def action_focus_next(self) -> None:
+        if self.buttons[-1].has_focus:
+            self.buttons[0].focus()
+        self.screen.focus_next()
+
 
 
 class HashtagWidget(Container):
+
+    BINDINGS = [
+        Binding("enter", "switch_to_hashtagpage", "Expand hashtag", show=True),
+    ]
 
 
     def __init__(self, json: dict, *args, **kwargs) -> None:
@@ -160,16 +196,19 @@ class HashtagWidget(Container):
         self.json = json
 
     def compose(self):
-        yield Static("hashtag", id="hashtag_name", classes="titlebar")
-        # yield Static("following", id="hashtag_following")
-        with Horizontal(classes="trend_footer"):
-            yield Static("history", id="hashtag_history", classes="trend_footer_nums")
-            with Vertical(classes="sparkline_container"):
-                yield Sparkline([0], id="hashtag_sparkline")
-                yield Static("Weekly Trend", classes="trend_label")
+        with Container(classes="content_container"):
+            yield SimpleButton("hashtag", id="hashtag_name", classes="titlebar")
+            # yield Static("following", id="hashtag_following")
+            with Horizontal(classes="trend_footer"):
+                yield Static("history", id="hashtag_history", classes="trend_footer_nums")
+                with Vertical(classes="sparkline_container"):
+                    yield Sparkline([0], id="hashtag_sparkline")
+                    yield Static("Weekly Trend", classes="trend_label")
 
     def on_mount(self):
 
+        self.can_focus = True
+        self.query_one("#hashtag_name").can_focus = False
         history = self.json["history"]
         counts_list, past_2_days, past_week = self.app.get_history_data(history)
 
@@ -183,9 +222,18 @@ class HashtagWidget(Container):
 
         self.loading = False
 
+    def on_focus(self):
+        self.log.debug(f"{self.name} focused. ")
+        self.styles.border = ('dashed', self.app.theme_variables["primary"])
+
+    def on_blur(self):
+        self.styles.border = ('blank', 'transparent')
+
+    def action_switch_to_hashtagpage(self):
+        self.app.push_screen(NotImplementedScreen("Hashtag page"))
+
 
 class NewsWidget(Container):
-
 
     def __init__(self, json: dict, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -197,21 +245,23 @@ class NewsWidget(Container):
     # TODO These should be using the card widget for the news.
 
     def compose(self):
-        yield Static("title", id="news_title", classes="titlebar")
-        yield Static("url", id="news_url")
-        yield Static("description", id="news_description")
-        yield Static("author", id="news_author")
-        yield Static("date", id="news_date")
-        yield Static("provider", id="news_provider")
+        with Container(classes="content_container"):
+            yield Static("title", id="news_title", classes="titlebar")
+            yield Static("url", id="news_url")
+            yield Static("description", id="news_description")
+            yield Static("author", id="news_author")
+            yield Static("date", id="news_date")
+            yield Static("provider", id="news_provider")
 
-        with Horizontal(classes="trend_footer"):
-            yield Static("history", id="news_history", classes="trend_footer_nums")
-            with Vertical(classes="sparkline_container"):
-                yield Sparkline([0], id="news_sparkline")
-                yield Static("Weekly Trend", classes="trend_label")
+            with Horizontal(classes="trend_footer"):
+                yield Static("history", id="news_history", classes="trend_footer_nums")
+                with Vertical(classes="sparkline_container"):
+                    yield Sparkline([0], id="news_sparkline")
+                    yield Static("Weekly Trend", classes="trend_label")
 
     def on_mount(self):
 
+        self.can_focus = True
         counts_list, past_2_days, past_week = self.app.get_history_data(self.json["history"])
         date_object: type = self.json["published_at"]  # Mastodon.py returns datetime objects
         self.log.debug(date_object)
@@ -231,13 +281,22 @@ class NewsWidget(Container):
 
         self.loading = False
 
+    def on_focus(self):
+        self.log.debug(f"{self.name} focused. ")
+        self.styles.border = ('dashed', self.app.theme_variables["primary"])
+
+    def on_blur(self):
+        self.styles.border = ('blank', 'transparent')
+
 
 # TODO Make PeopleWidget
 
 
 class ImageViewerWidget(Container):
     """This is a simple widget that displays an image in a container.
-    It's used across the program to display images. It's controlled by the ImageViewer class."""
+    It's used across the program to display images. It's controlled by the ImageViewer class.
+    
+    Connected to screens.ImageScreen for fullscreen viewing."""
 
     def __init__(self, image_url: str, in_card: bool = False, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -246,16 +305,13 @@ class ImageViewerWidget(Container):
         self.can_focus = False
 
     async def on_mount(self):
-        # Yes, it appears strange how this setup is in on_mount istead of __init__ and compose.
-        # But its because it loads the image in the background with a worker.
-        # The worker protocol is async and can't be used in __init__ or compose.
         
         with self.app.capture_exceptions():
             img_worker = self.load_image_from_url()
+            self.img = await img_worker.wait()
         if self.app.error:
             return
 
-        self.img = await img_worker.wait()
         self.imgview = ImageViewer(self.img, nested=True, id="imgview")
         self.mount(self.imgview)
         if not self.in_card:
@@ -276,16 +332,19 @@ class ImageViewerWidget(Container):
         
     async def on_click(self):
         if not self.in_card:
-            await self.app.push_screen(ImageScreen(self.img, classes="fullscreen"))
+            await self.fullscreen()
+
+    async def fullscreen(self):
+        await self.app.push_screen(ImageScreen(self.img, classes="fullscreen"))
 
     @on(Worker.StateChanged)
     def worker_state_changed(self, event: Worker.StateChanged) -> None:
         
-        if event.worker.state.name == 'SUCCESS':
+        if event.state == WorkerState.SUCCESS:
             self.log(Text(f"Worker {event.worker.name} completed successfully", style="green"))
-        elif event.worker.state.name == 'ERROR':
+        elif event.state == WorkerState.ERROR:
             self.log.error(Text(f"Worker {event.worker.name} encountered an error", style="red"))
-        elif event.worker.state.name == 'CANCELLED':
+        elif event.state == WorkerState.CANCELLED:
             self.log(Text(f"Worker {event.worker.name} was cancelled", style="yellow"))
 
 

@@ -193,3 +193,10 @@ PortInput {
     content-align: center middle;
     margin: 0 0 1 0;
 }
+
+.short_label {
+    width: 1fr;
+    height: 1;
+    content-align: center middle;
+    margin: 0;
+}

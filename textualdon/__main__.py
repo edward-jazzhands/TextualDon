@@ -25,8 +25,9 @@ from textual_pyfiglet.pyfiglet import figlet_format
 
 # Textual imports
 from textual import work
+from textual.reactive import reactive
 from textual.errors import TextualError     # for testing
-from textual.worker import Worker #, WorkerFailed
+from textual.worker import Worker, WorkerState #, WorkerFailed
 from textual.events import Resize
 from textual.binding import Binding
 from textual.app import App, on
@@ -47,7 +48,7 @@ from textualdon.settings import Settings
 from textualdon.sql import SQLite
 from textualdon.messages import (
     UpdateBannerMessage,
-    OnlineStatus,
+    SuperNotify,
     LoginComplete,
     LoginStatus,
     ExamineToot,
@@ -103,55 +104,52 @@ class TextualDon(App):
         Binding(key="ctrl+d", action="disable_safe_mode", description="Disable Safe Mode", show=False, priority=True),
     ]
 
-    error_handler: ErrorHandler | None = None  # Error handler instance
-    mastodon:     Mastodon | None = None       # API Wrapper instance
-    sqlite:         SQLite | None = None       # SQLite database instance
-    instance_url:      str | None = None       # current connected instance
-    stored_page:       str | None = None       # stored page when the window is too small
-    logged_in_user_id: int | None = None       # ID of the logged in user
-    previous_pages = deque(maxlen=5)           # previous pages before the current one
-    WSL  = False                               # Windows Subsystem for Linux flag
-    safe_mode = False                          # Safe mode flag
-    error = False                              # Flag for error state
-    init_complete = False
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        self.error_handler: ErrorHandler | None = None  # Error handler instance
+        self.mastodon:     Mastodon | None = None       # API Wrapper instance
+        self.sqlite:         SQLite | None = None       # SQLite database instance
+        self.instance_url:      str | None = None       # current connected instance
+        self.stored_page:       str | None = None       # stored page when the window is too small
+        self.logged_in_user_id: int | None = None       # ID of the logged in user
+        self.previous_pages = deque(maxlen=5)           # previous pages before the current one
+        self.WSL  = False                               # Windows Subsystem for Linux flag
+        self.safe_mode = False                          # Safe mode flag
+        self.error = False                              # Flag for error state
+        self.init_complete = False
 
-    current_os = platform.system()
-    release = platform.uname().release.lower() # nwrite comment: 
+        self.current_os = platform.system()
+        self.release = platform.uname().release.lower() # nwrite comment: 
 
-    if 'linux' in current_os.lower() and 'microsoft' in release.lower():
-        WSL = True
+        if 'linux' in self.current_os.lower() and 'microsoft' in self.release.lower():
+            self.WSL = True
 
-    app_name = "textualdon"
+        self.app_name = "textualdon"
+        self.data_dir: Path = Path(user_data_dir(appname=self.app_name, ensure_exists=True))    # using platformdirs library
 
-    data_dir: Path = Path(user_data_dir(appname=app_name, ensure_exists=True))    # using platformdirs library
-    # logfile_path = data_dir / "error.log"
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(base_dir, "config.ini")
+        self.config = configparser.ConfigParser()      #~ Access the configs globally with self.app.config
 
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(base_dir, "config.ini")
-    config = configparser.ConfigParser()      # Access the configs globally with self.app.config
+        cfg_read = self.config.read(config_path)
+        if not cfg_read:
+            raise FileNotFoundError("config.ini file not found.")
+        
+        ##~ Development settings ~##
+        self.delete_db_on_start = self.config.getboolean("MAIN", "delete_db_on_start")
+        self.force_no_clipman   = self.config.getboolean("MAIN", "force_no_clipman")
+        self.text_insert_time = self.config.getfloat("MAIN", "text_insert_time") #* global
 
-    cfg_read = config.read(config_path)
-    if not cfg_read:
-        raise FileNotFoundError("config.ini file not found.")
-    
-    ##~ Development settings ~##
-    delete_db_on_start = config.getboolean("MAIN", "delete_db_on_start")
-    start_theme        = config.get("MAIN", "start_theme")
-    force_no_clipman   = config.getboolean("MAIN", "force_no_clipman")
-    text_insert_time   = config.getfloat("MAIN", "text_insert_time")
-
-    # These are premade figlets for prettying up the dev console.
-    # Because I'm just super fancy like that.
-    breaker_figlet = figlet_format("-----------", font="smblock").strip() + "\n"
-    logo_figlet = figlet_format("  TextualDon  ", font="smblock")
-    
+        # These are premade figlets for prettying up the dev console.
+        # Because I'm just super fancy like that.
+        self.breaker_figlet = figlet_format("-----------", font="smblock").strip() + "\n"   #* global
+        self.logo_figlet = figlet_format("  TextualDon  ", font="smblock")                  #* global
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
 
         self.log(Text(f"{self.breaker_figlet}\n{self.logo_figlet}", style="cyan"))
-
-        self.theme = self.start_theme
 
         #~ 3 classes in the app are Hidden classes that inherit from DOMNode:
         # ErrorHandler   (app.error_handler)  |  error_handler.py
@@ -183,6 +181,10 @@ class TextualDon(App):
             )[0]
             hatching = None if hatching == 'none' else hatching
 
+            self.theme = self.sqlite.fetchone(
+                "SELECT value FROM settings WHERE name= ?", ("current_theme",)
+            )[0]
+
         if self.force_no_clipman:
             self.clipman_works = False
         else:
@@ -202,7 +204,7 @@ class TextualDon(App):
 
         if self.delete_db_on_start:
             self.log.warning(Text("You are in Development Mode. Database is deleted on start.", style="red"))
-            
+
         with self.capture_exceptions():
             yield TopBar(id="topbar", classes="topbar")
             yield SafeModeBar(id="safe_mode_bar", classes="topbar safemode")
@@ -248,23 +250,10 @@ class TextualDon(App):
         login_page = self.main_switcher.query_one("#login_page")
         self.settings_widget = login_page.query_one("#settings_widget")
 
-        self.main_scroll.can_focus = False
-
-        warning_checkbox_wsl  = self.sqlite.fetchone("SELECT value FROM settings WHERE name= ?", ("warning_checkbox_wsl",))
-        warning_checkbox_wsl  = (warning_checkbox_wsl[0] == "True")
-        warning_checkbox_first = self.sqlite.fetchone("SELECT value FROM settings WHERE name= ?", ("warning_checkbox_first",))
-        warning_checkbox_first = (warning_checkbox_first[0] == "True")
-
-        if self.WSL and not warning_checkbox_wsl:
-            await self.push_screen(WSLWarning(classes="modal_screen", id="introscreen_wsl"), self.intro_screens_callback)
-        if not warning_checkbox_first:                  # pushed after = on top / seen first.
-            await self.push_screen(FirstWarning(classes="modal_screen", id="introscreen_first"), self.intro_screens_callback)   
+        self.main_scroll.can_focus = False 
 
         self.init_complete = True
         self.log(Text(f"Initialization complete. \n {self.breaker_figlet}", style="green"))
-
-        # Now log the user in if they have auto-login enabled    
-        self.oauth_widget.saved_users_manager.check_auto_login()
 
         row1 = self.sqlite.fetchone("SELECT value FROM settings WHERE name= ?", ("show_images",))
         row2 = self.sqlite.fetchone("SELECT value FROM settings WHERE name= ?", ("link_behavior",))
@@ -273,8 +262,21 @@ class TextualDon(App):
         self.link_behavior  = int(row2[0])          # 0 = open in browser, 1 = copy to clipboard
         self.autoload_value = (row3[0] == "True")
 
+        warning_checkbox_wsl  = self.sqlite.fetchone("SELECT value FROM settings WHERE name= ?", ("warning_checkbox_wsl",))
+        warning_checkbox_wsl  = (warning_checkbox_wsl[0] == "True")
+        warning_checkbox_first = self.sqlite.fetchone("SELECT value FROM settings WHERE name= ?", ("warning_checkbox_first",))
+        warning_checkbox_first = (warning_checkbox_first[0] == "True")
+
         if self.initial_page == "login_page":
             self.focus_login()
+
+        if self.WSL and not warning_checkbox_wsl:
+            await self.push_screen(WSLWarning(classes="modal_screen", id="introscreen_wsl"), self.intro_screens_callback)
+        if not warning_checkbox_first:                  # pushed after = on top / seen first.
+            await self.push_screen(FirstWarning(classes="modal_screen", id="introscreen_first"), self.intro_screens_callback) 
+
+        # Finally:   
+        self.oauth_widget.saved_users_manager.check_auto_login() 
 
     def attach_mastodon(self, mastodon: Mastodon):
         """The proxy class centralizes the error handling for the Mastodon API."""
@@ -304,7 +306,6 @@ class TextualDon(App):
     @on(ExceptionMessage)
     async def handle_exception(self, event: ExceptionMessage):
         """All exceptions are sent here for handling."""
-        self.bell()     # (ଘ¬‿¬)   
         try:
             await self.error_handler.handle_exception(event.exception)
         except Exception as e:
@@ -334,13 +335,13 @@ class TextualDon(App):
 
         if self.init_complete:
             width, height = event.size
-            if self.main_switcher.current != "too_small" and width < 60:
+            if self.main_switcher.current != "too_small" and width < 65:
                 self.stored_page = self.main_switcher.current
                 self.post_message(SwitchMainContent("too_small"))
                 self.main_tootbox.visible = False
                 self.log.debug(f"stored_page: {self.stored_page}")
 
-            if self.main_switcher.current == "too_small" and width > 60:
+            if self.main_switcher.current == "too_small" and width > 65:
                 self.post_message(SwitchMainContent(self.stored_page))
                 self.main_tootbox.visible = True
 
@@ -417,7 +418,6 @@ class TextualDon(App):
         if self.autoload_value and page_obj.refresh_allowed:
             await page_obj.start_refresh_page()
 
-
     @on(ScrollToWidget)
     def scroll_to_widget(self, event: ScrollToWidget) -> None:
         """Allows scrolling the main scroll area to a specific widget on the page."""
@@ -441,15 +441,15 @@ class TextualDon(App):
             if relation['following']:
                 await self.mastodon.account_unfollow(account["id"])
                 self.log.debug(f"Unfollowed {account['display_name']}")
-                self.post_message(UpdateBannerMessage(f"Unfollowed {account['display_name']}"))  
+                self.post_message(SuperNotify(f"Unfollowed {account['display_name']}"))  
             else:
                 await self.mastodon.account_follow(account["id"])
                 self.log.debug(f"Followed {account['display_name']}")
-                self.post_message(UpdateBannerMessage(f"Followed {account['display_name']}"))
+                self.post_message(SuperNotify(f"Followed {account['display_name']}"))
 
         elif message == "profile":
 
-            user_page = self.query_one("#user_page")
+            user_page = self.main_switcher.query_one("#user_page")
             user_page.update_user(account, relation)
             self.post_message(SwitchMainContent("user_page"))
             self.post_message(UpdateBannerMessage(f"Viewing profile for {account['display_name']}"))
@@ -470,23 +470,21 @@ class TextualDon(App):
 
     @on(UpdateBannerMessage)
     async def update_message(self, event: UpdateBannerMessage) -> None:
-        """ ```
-        from messages import UpdateBannerMessage
 
-        self.post_message(UpdateBannerMessage("Hello, World!"))
-        ``` """
         self.log.debug(f"Updating banner message: {event.message}")
         await self.messagebar.update(event.message)
 
-    @on(OnlineStatus)
-    def update_online_status(self, event: OnlineStatus) -> None:
-        """Online status in the top bar."""
-        self.topbar.update(event.message, event.instance_url)
+    @on(SuperNotify)
+    async def super_notify(self, event: SuperNotify) -> None:
+
+        await self.messagebar.update(event.message)
+        self.notify(event.message)
 
     @on(LoginStatus)
     def update_login_status(self, event: LoginStatus) -> None:
         """Login status in the Oauth widget."""
-        self.login_status.update(event.message)
+        self.login_status.update(event.loginpage_message)
+        self.topbar.update(event.statusbar, event.instance_url)
 
     @on(SwitchMainContent)
     async def switch_page(self, event: SwitchMainContent) -> None:
@@ -515,7 +513,7 @@ class TextualDon(App):
     @on(ExamineToot)
     async def examine_toot(self, event: ExamineToot) -> None:
 
-        toot_page = self.query_one("#toot_page")
+        toot_page = self.main_switcher.query_one("#toot_page")
         toot_page.main_toot_id = event.toot_id   
         self.post_message(SwitchMainContent("toot_page"))
         self.post_message(UpdateBannerMessage("Expanding single toot"))
@@ -573,7 +571,6 @@ class TextualDon(App):
             self.log.debug(f"Browser open result: {result}")
             if result:
                 self.notify("Browser opened.", timeout=3)
-                self.post_message(UpdateBannerMessage("Browser window opened."))
             else:
                 self.notify("Failed to open browser.", timeout=3)
 
@@ -667,6 +664,13 @@ class TextualDon(App):
     def action_previous_page(self):
         self.post_message(SwitchMainContent("back"))
 
+    ###~ REACTIVES ~###
+
+    def watch_theme(self, value: str) -> None:
+
+        self.log.debug(f"Theme changed to: {value}")
+        self.sqlite.update_column("settings", "value", value, "name", "current_theme")
+
 
     ###~ Worker Debug stuff ~###
 
@@ -674,16 +678,16 @@ class TextualDon(App):
     def worker_state_changed(self, event: Worker.StateChanged) -> None:
 
         self.log.debug(Text(
-                f"Worker.state: {event.worker.state.name}\n"
+                f"Worker.state: {event.state}\n"
                 f"Worker.name: {event.worker.name}",
                 style="cyan"
         ))
 
-        if event.worker.state.name == 'SUCCESS':
+        if event.state == WorkerState.SUCCESS:
             self.log(Text(f"Worker {event.worker.name} completed successfully", style="green"))
-        elif event.worker.state.name == 'ERROR':
+        elif event.state == WorkerState.ERROR:
             self.log.error(Text(f"Worker {event.worker.name} encountered an error", style="red"))
-        elif event.worker.state.name == 'CANCELLED':
+        elif event.state == WorkerState.CANCELLED:
             self.log(Text(f"Worker {event.worker.name} was cancelled", style="yellow"))
 
 def run():

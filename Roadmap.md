@@ -20,6 +20,8 @@ Use Mastodon API to implement continuous toot scrolling
 Muted users / Blocked users / Muted words / Blocked domains
 Followed Hashtags / Pending requests
 
+## Authentication / Working over SSH
+
 ## Better back button
 Back button should save the scrollbar location on the previous pages.
 

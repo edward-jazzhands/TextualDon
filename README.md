@@ -1,1 +1,5 @@
-## NOTE: if using WSL then its required to have the WSL-Utilities package
+# TextualDon
+A Mastodon client built with the Textual framework for Python.
+
+
+

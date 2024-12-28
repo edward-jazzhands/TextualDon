@@ -10,7 +10,7 @@ from mastodon import Mastodon
 
 # Textual imports
 from textual import on, work
-from textual.worker import Worker
+from textual.worker import Worker, WorkerState
 from textual.binding import Binding
 from textual.message import Message
 from textual.containers import Container, Horizontal
@@ -23,8 +23,7 @@ from rich.emoji import Emoji
 # TextualDon imports
 from textualdon.simplebutton import SimpleButton
 from textualdon.messages import (
-    UpdateBannerMessage,
-    OnlineStatus,
+    SuperNotify,
     LoginStatus,
 )
 from textualdon.sql import SQLite    # only for casting
@@ -75,6 +74,7 @@ class UserEntry(Horizontal):
     def on_mount(self):
         self.user_select_button = self.query_one("#user_select_button")
         self.user_delete_button = self.query_one("#user_delete_button")
+        self.user_delete_button.can_focus = False
 
         self.log.debug(
             "UserEntry mounted with: \n"
@@ -130,15 +130,13 @@ class SavedUsersManager(Widget):
 
         with self.app.capture_exceptions():
             users_list = await self.get_saved_logins()
-            if users_list:
-                await self.mount_saved(users_list)
         if self.app.error:
             return
         else:
             self.log.debug("Saved users list successfully retrieved.")
             if users_list:
                 self.users_list = users_list
-
+                await self.mount_saved(users_list)
 
     async def get_saved_logins(self) -> List[UserEntry]:
 
@@ -150,7 +148,7 @@ class SavedUsersManager(Widget):
         users_list = []
 
         if users:
-            self.log(Text("Users found in database: \n", style="green"))
+            self.log(Text(f"Users found in database: {len(users_list)}", style="green"))
             for user in users:
                 user_id = user[0]
                 instance_url = user[1]
@@ -165,10 +163,7 @@ class SavedUsersManager(Widget):
     async def mount_saved(self, users_list: List[UserEntry]) -> None:
 
         await self.users_container.remove_children()
-
-        for user in users_list:
-            self.users_container.mount(user)
-
+        self.users_container.mount_all(users_list)
         self.users_container.refresh(layout=True)
 
     def check_auto_login(self) -> None:
@@ -197,12 +192,13 @@ class SavedUsersManager(Widget):
         """Used by user_selected and user_deleted functions to create a Mastodon object."""
 
         try:        
-            mastodon = Mastodon(         
+            mastodon = Mastodon(                #~ Creates Mastodon instance here.
                 client_id = app_data[2],
                 client_secret = app_data[3],
                 access_token = access_token,
                 api_base_url = instance_url,
-            )    
+                version_check_mode='none',
+            )          
         except Exception as e:
             e.add_note("SavedUsersManager.create_mastodon_instance failed to create Mastodon object.")
             raise e
@@ -269,10 +265,11 @@ class SavedUsersManager(Widget):
             if user_id == self.app.logged_in_user_id:   
                 self.app.mastodon = None               
                 self.app.logged_in_user_id = None
-                self.post_message(LoginStatus("Logged out."))
-                self.post_message(UpdateBannerMessage("Logging out..."))
-                self.notify("Logged out.")
-                self.post_message(OnlineStatus("Status: Offline"))
+                self.post_message(LoginStatus(
+                    statusbar="Status: Offline",
+                    loginpage_message="Logged out."
+                    ))
+                self.post_message(SuperNotify("Logged out."))
 
         app_data = self.db.fetchone("SELECT * FROM app_data WHERE instance_url = ?", (instance_url,))
 
@@ -289,8 +286,7 @@ class SavedUsersManager(Widget):
 
         self.db.delete_one('users', 'id', user_id)
         await self.start_process()
-        self.post_message(UpdateBannerMessage(f"Deleted user {username} on {instance_url}"))
-        self.notify(f"Deleted user {username} on {instance_url}")
+        self.post_message(SuperNotify(f"Deleted user {username} on {instance_url}"))
 
     ###~ Worker Debug stuff ~###
 
@@ -303,10 +299,10 @@ class SavedUsersManager(Widget):
                 style="cyan"
         ))
 
-        if event.worker.state.name == 'SUCCESS':
+        if event.state == WorkerState.SUCCESS:
             self.log(Text(f"Worker {event.worker.name} completed successfully", style="green"))
-        elif event.worker.state.name == 'ERROR':
+        elif event.state == WorkerState.ERROR:
             self.log.error(Text(f"Worker {event.worker.name} encountered an error", style="red"))
-        elif event.worker.state.name == 'CANCELLED':
+        elif event.state == WorkerState.CANCELLED:
             self.log(Text(f"Worker {event.worker.name} was cancelled", style="yellow"))
 

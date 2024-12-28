@@ -11,15 +11,27 @@ class UpdateBannerMessage(Message):
         super().__init__()
         self.message = str(message)
 
-class OnlineStatus(Message):
-    """Message to update the login status.
+class SuperNotify(Message):
+    """Triggers a notification and updates the banner at the same time."""
+    def __init__(self, message: str) -> None:
+        super().__init__()
+        self.message = str(message)
+
+class LoginStatus(Message):
+    """Message to update the login status in the Oauth widget.
     ```
     from textualdon.messages import LoginStatus
     self.post_message(LoginStatus("Logged in successfully"))
     ``` """
-    def __init__(self, message: str, instance_url: str = None) -> None:
+    def __init__(
+        self, 
+        statusbar: str,
+        loginpage_message: str,
+        instance_url: str = None
+    ) -> None:
         super().__init__()
-        self.message = message
+        self.statusbar = statusbar
+        self.loginpage_message = loginpage_message
         self.instance_url = instance_url
 
 class RefreshCurrentPage(Message):
@@ -53,18 +65,6 @@ class ExamineToot(Message):
 class LoginComplete(Message):
     """Message to signal that the login process is complete."""
     pass
-
-class LoginStatus(Message):
-    """Message to update the login status in the Oauth widget.
-    ```
-    from textualdon.messages import LoginStatus
-    self.post_message(LoginStatus("Logged in successfully"))
-    ``` """
-
-    def __init__(self, message: str) -> None:
-        super().__init__()
-        self.message = message
-
 
 class UserPopupMessage(Message):
     """ ``` \n

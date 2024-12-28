@@ -1,6 +1,6 @@
 # Standard library imports
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable #, cast
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -9,14 +9,15 @@ if TYPE_CHECKING:
 # Third party imports
 from textual_pyfiglet import FigletWidget
 from rich.text import Text
+# from mastodon import Mastodon
 
 # Textual imports
 from textual import on, work
 from textual.message import Message
-from textual.worker import Worker
+from textual.worker import Worker, WorkerState
 from textual.containers import Horizontal, Container
 from textual.widget import Widget
-from textual.widgets import Collapsible, Static
+from textual.widgets import Static
 
 # TextualDon imports
 from textualdon.widgets import (
@@ -30,7 +31,8 @@ from textualdon.toot import TootWidget
 from textualdon.oauth import OAuthWidget
 from textualdon.widgets import WelcomeWidget
 from textualdon.simplebutton import SimpleButton
-from textualdon.messages import UpdateBannerMessage, SwitchMainContent
+from textualdon.messages import UpdateBannerMessage, SuperNotify, SwitchMainContent
+from textualdon.screens import NotImplementedScreen
 
 
 class PageHeader(Horizontal):
@@ -50,7 +52,7 @@ class PageHeader(Horizontal):
         yield SimpleButton("Refresh", id="refresh_button", classes="header_button")
 
     def on_mount (self):
-
+        self.query_one("#refresh_button").can_focus = False
         if not self.refresh_visible:
             self.query_one("#refresh_button").visible = False
 
@@ -72,11 +74,11 @@ class Page(Container):
             return
 
         if self.app.safe_mode:
-            self.notify("Please disable safe mode to refresh the page.")
+            self.post_message(SuperNotify("Please disable safe mode to refresh."))
             return
         
         if not self.app.mastodon:
-            self.post_message(UpdateBannerMessage("You are not logged in."))
+            self.post_message(SuperNotify("You are not logged in."))
             return
         
         self.log(Text(f"{self.app.breaker_figlet}", style="green"))
@@ -84,7 +86,8 @@ class Page(Container):
         self.log.debug(f"Refreshing {self.timeline} page")
         self.post_message(UpdateBannerMessage(f"Refreshing {self.timeline} page"))
 
-        self.refresh_page()
+        with self.app.capture_exceptions():
+            self.refresh_page()
 
     async def _refresh_page(
         self,
@@ -93,38 +96,43 @@ class Page(Container):
         *args,
         **kwargs
     ):
+        """*args and **kwargs are passed to the method that is called on the Mastodon object."""
+
+        css_dict = {
+            TootWidget: "toot",
+            HashtagWidget: "hashtag",
+            NewsWidget: "news",
+            ProfileWidget: "profile",
+        }
+        css_class = css_dict[widget_type]
 
         children = list(self.query_children().results())
+        self.log.debug(f"children: {children}")
+        to_remove = []
         for child in children:
-            self.log.debug(f"child: {child}  |  type: {type(child)}")
             if isinstance(child, PageHeader) or isinstance(child, TimelineSelector):
-                children.remove(child)              # remove these from list because we 
-        await self.remove_children(children)        # dont want to remove the header
+                pass                 # dont want to remove the headers
+            else:
+                to_remove.append(child)
+        await self.remove_children(to_remove)  
 
-        try:
-            method_obj = getattr(self.app.mastodon, method)
-            json_response = await method_obj(*args, **kwargs)
-        except Exception as e:
-            raise e
+        method_obj = getattr(self.app.mastodon, method)
+        json_response = await method_obj(*args, **kwargs)
 
-        try:
-            widgets = [
-                widget_type(name=f"{widget_type}_{index}", json=json, classes="page_box toot") 
-                for index, json in enumerate(json_response)
-            ]
-            await self.mount_all(widgets)
-        except Exception as e:
-            raise e
-    
+        widgets = [
+            widget_type(name=f"{widget_type}_{index}", json=json, classes=f"page_box {css_class}") 
+            for index, json in enumerate(json_response)
+        ]
+        await self.mount_all(widgets)
 
     @on(Worker.StateChanged)
     def worker_state_changed(self, event: Worker.StateChanged) -> None:
         
-        if event.worker.state.name == 'SUCCESS':
+        if event.state == WorkerState.SUCCESS:
             self.log(Text(f"Worker {event.worker.name} completed successfully", style="green"))
-        elif event.worker.state.name == 'ERROR':
+        elif event.state == WorkerState.ERROR:
             self.log.error(Text(f"Worker {event.worker.name} encountered an error", style="red"))
-        elif event.worker.state.name == 'CANCELLED':
+        elif event.state == WorkerState.CANCELLED:
             self.log(Text(f"Worker {event.worker.name} was cancelled", style="yellow"))
 
 
@@ -151,27 +159,24 @@ class HomePage(Page):
     timeline = "home"
 
     def compose(self) -> ComposeResult:
-
         yield PageHeader(self.timeline)
 
     @work
     async def refresh_page(self):
 
-        with self.app.capture_exceptions():
-            await self._refresh_page(
-                widget_type = TootWidget,
-                method = "timeline",
-                limit = self.limit,
-                timeline = self.timeline
-            )
-
+        await self._refresh_page(
+            widget_type = TootWidget,
+            method = "timeline",
+            limit = self.limit,
+            timeline = self.timeline
+        )
 
 class NotificationsPage(Page):
 
     timeline = "notifications"
+    refresh_allowed = False
     
     def compose(self) -> ComposeResult:
-
         yield PageHeader(self.timeline)
         yield Static("Notifications page is a work in progress", classes="page_box wip")
 
@@ -182,18 +187,10 @@ class NotificationsPage(Page):
     
         json_response = await self.app.mastodon.notifications()
 
-        widgets = [
-            Collapsible(name=f"notif_{index}", title=json_response[index]["type"])
-            for index, json in enumerate(json_response)
-        ]
-        
-        await self.mount_all(widgets)
-
 
 class ExplorePage(Page):
 
     page = "explore"
-    starter_timeline = 0                # 0 = explore_posts
     timeline = "explore_posts"
 
     timeline_list = [
@@ -204,9 +201,8 @@ class ExplorePage(Page):
     ]
     
     def compose(self) -> ComposeResult:
-
         yield PageHeader(self.page)
-        yield TimelineSelector(self.timeline_list, current=self.starter_timeline)
+        yield TimelineSelector(self.timeline_list)
 
     @on(TimelineSelector.ChangeTimeline)
     def change_timeline(self, event: TimelineSelector.ChangeTimeline) -> None:
@@ -216,27 +212,22 @@ class ExplorePage(Page):
     @work
     async def refresh_page(self):
 
-        with self.app.capture_exceptions():
-            if self.timeline == "explore_hashtags":
-                await self._refresh_page(HashtagWidget, "trending_tags", limit=self.limit)
+        if self.timeline == "explore_hashtags":
+            await self._refresh_page(HashtagWidget, "trending_tags", limit=self.limit)
 
-        with self.app.capture_exceptions():
-            if self.timeline == "explore_news":
-                await self._refresh_page(NewsWidget, "trending_links", limit=self.limit)
+        if self.timeline == "explore_news":
+            await self._refresh_page(NewsWidget, "trending_links", limit=self.limit)
 
-        with self.app.capture_exceptions():
-            if self.timeline == "explore_posts":
-                await self._refresh_page(TootWidget, "trending_statuses", limit=self.limit)
+        if self.timeline == "explore_posts":
+            await self._refresh_page(TootWidget, "trending_statuses", limit=self.limit)
 
-        with self.app.capture_exceptions():
-            if self.timeline == "explore_people":
-                self.log("Not implemented yet.")
+        if self.timeline == "explore_people":
+            self.app.push_screen(NotImplementedScreen("Explore People"))
 
 
 class LiveFeeds(Page):
 
     page = "livefeeds"
-    starter_timeline = 0                # 0 = explore_posts
     timeline = "local"
 
     timeline_list = [
@@ -246,7 +237,7 @@ class LiveFeeds(Page):
 
     def compose(self) -> ComposeResult:
         yield PageHeader(self.page)
-        yield TimelineSelector(self.timeline_list, current=self.starter_timeline)
+        yield TimelineSelector(self.timeline_list)
 
     @on(TimelineSelector.ChangeTimeline)
     def change_timeline(self, event: TimelineSelector.ChangeTimeline) -> None:
@@ -256,21 +247,20 @@ class LiveFeeds(Page):
     @work
     async def refresh_page(self):
 
-        with self.app.capture_exceptions():
-            await self._refresh_page(
-                widget_type = TootWidget,
-                method = "timeline",
-                limit = self.limit,
-                timeline = self.timeline
-            )
+        await self._refresh_page(
+            widget_type = TootWidget,
+            method = "timeline",
+            limit = self.limit,
+            timeline = self.timeline
+        )
 
 
 class PrivateMentionsPage(Page):
 
     timeline = "private mentions"
+    refresh_allowed = False
     
     def compose(self) -> ComposeResult:
-
         yield PageHeader(self.timeline)
         yield Static("Private Mentions page is a work in progress", classes="page_box wip")
 
@@ -279,7 +269,7 @@ class PrivateMentionsPage(Page):
 
         return    #! WIP
 
-        json_response = await self.app.mastodon.notifications(mentions_only=True)    
+        # json_response = await self.app.mastodon.notifications(mentions_only=True)    
 
 
 class BookmarksPage(Page):
@@ -287,17 +277,15 @@ class BookmarksPage(Page):
     timeline = "bookmarks"
     
     def compose(self) -> ComposeResult:
-
         yield PageHeader(self.timeline)
 
     @work
     async def refresh_page(self):
 
-        with self.app.capture_exceptions():
-            await self._refresh_page(
-                widget_type = TootWidget,
-                method = "bookmarks",
-            )
+        await self._refresh_page(
+            widget_type = TootWidget,
+            method = "bookmarks",
+        )
 
 
 class FavoritesPage(Page):
@@ -305,36 +293,32 @@ class FavoritesPage(Page):
     timeline = "favorites"
     
     def compose(self) -> ComposeResult:
-
         yield PageHeader(self.timeline)
 
     @work
     async def refresh_page(self):
 
-        with self.app.capture_exceptions():
-            await self._refresh_page(
-                widget_type = TootWidget,
-                method = "favourites",
-            )
+        await self._refresh_page(
+            widget_type = TootWidget,
+            method = "favourites",
+        )
 
 
 class ListsPage(Page):
 
     timeline = "lists"
+    refresh_allowed = False
     
     def compose(self) -> ComposeResult:
-
         yield PageHeader(self.timeline)
-        # yield self.options_bar
         yield Static("Lists page is a work in progress", classes="page_box wip")
-
 
     @work
     async def refresh_page(self):
 
         return    #! WIP
 
-        json_response = await self.app.mastodon.lists()       
+        # json_response = await self.app.mastodon.lists()       
 
 
 class TootPage(Page):
@@ -343,7 +327,6 @@ class TootPage(Page):
     main_toot_id: int | None = None
 
     def compose(self) -> ComposeResult:
-
         yield PageHeader(self.timeline)
 
     @work
@@ -351,7 +334,6 @@ class TootPage(Page):
         """The logic here is too compex to re-use the _refresh_page method."""
 
         self.json = await self.app.mastodon.status(self.main_toot_id)
-
         await self.remove_children()
 
         # first mount the main toot
@@ -379,6 +361,7 @@ class UserProfilePage(Page):
 
     def compose(self) -> ComposeResult:
         yield PageHeader(self.timeline)
+        yield Static("User Profile page is a work in progress", classes="page_box wip")
 
     def update_user(self, account_dict: dict, relation_dict: dict) -> None:
         self.account = account_dict
@@ -414,7 +397,7 @@ class DevelopmentPage(Container):
     refresh_allowed = False
 
     def compose(self) -> ComposeResult:
-        
+
         yield PageHeader("Development Settings", refresh_visible=self.refresh_allowed)
         yield DevSettings(classes="settings dev")
 
@@ -422,7 +405,7 @@ class DevelopmentPage(Container):
 class AboutPage(Container):
 
     refresh_allowed = False
-    git_repo = "http://www.github.com/edward_jazzhands/textualdon"
+    git_repo = "http://www.github.com/edward-jazzhands/textualdon"
 
     about_text = f"""TextualDon - by Edward Jazzhands © Copyright 2024 \n
 TextualDon is a Mastodon client built with the Textual framework for Python. \n

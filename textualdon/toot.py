@@ -118,7 +118,7 @@ class TootWidget(Horizontal):
         self.loading = True         # always starts with loading screen
 
         yield Static(id="in_reply_markerbar")
-        with Container(id="toot_container"):
+        with Container(id="toot_container", classes="content_container"):
             if self.reblog:
                 yield SimpleButton(self.boosted_by, id="boosted_by_button", classes="toot_element")
             if self.in_reply_to_id:
@@ -287,6 +287,8 @@ class TootWidget(Horizontal):
         self.log.debug(f"{self.name} focused. ")
         self.styles.border = ('dashed', self.app.theme_variables["primary"])
 
+        # TODO Need note about doing this through the code and not CSS
+
     def on_blur(self):
         self.styles.border = ('blank', 'transparent')
 
@@ -337,9 +339,11 @@ class TootWidget(Horizontal):
                 if not self.app.error:
                     self.call_after_refresh(self.load_toot_data)
                     self.call_after_refresh(self.toot_content_container.load_toot_content)
-
-
         self.set_timer(delay, refresh_internal)   # half second delay to give server time to refresh.
+
+
+    async def view_image(self):
+        await self.toot_content_container.imgviewer_widget.fullscreen()
 
     @on(SimpleButton.Pressed, selector='#toot_username_button')
     @work
@@ -587,27 +591,31 @@ class TootContentContainer(Vertical):
         self.toot_widget = toot_widget
         self.bs4_parser = BS4Parser()
         self.media = self.toot_widget.media_attachments
-        self.card = self.toot_widget.card
-
+        self.image_url = self.media[0]["preview_url"] if self.media else None
+        self.image_on: bool = False
         self.parsed_content = None
+
+        # TODO Maybe should not be using preview_url for images. But it seems to work for now.
+        # We can't exactly display a very high res image in a terminal anyway.
 
     def compose(self):
         yield SimpleButton('', id='toot_content_button', classes="toot_content", no_wrap=None, overflow=None)
 
-        if self.media:
-            if self.app.show_images:
-                yield ImageViewerWidget(
-                    self.media[0]["preview_url"],
-                    id="imgviewer_widget",
-                    classes="toot_image"
-                )
-            yield Static("", id='media_description', classes="toot_extra")
+        if self.app.show_images and self.image_url:
+            self.image_on = True
+            yield ImageViewerWidget(
+                self.image_url,
+                id="imgviewer_widget",
+                classes="toot_image"
+            )
+        yield Static("", id='media_description', classes="toot_extra")
 
-        if self.card:
+        if self.toot_widget.card:
             yield TootCardWidget(self.toot_widget, id="toot_card_widget", classes="toot_card")
 
     def on_mount(self):
 
+        self.imgviewer_widget = self.query_one("#imgviewer_widget") if self.image_on else None
         self.call_after_refresh(self.load_toot_content)
 
     def load_toot_content(self):
@@ -615,7 +623,7 @@ class TootContentContainer(Vertical):
         self.parsed_content = self.bs4_parser.parser(self.toot_widget.json["content"])
         self.query_one("#toot_content_button").update(self.parsed_content)
     
-        if self.media:
+        if self.image_url:
             description1 = f"Image description: {self.media[0]['description']}"
             self.query_one("#media_description").update(description1)
 
@@ -825,7 +833,7 @@ class TootCardWidget(Vertical):
     def compose(self):
 
         # If there's both media attachments and a toot card, we only want to show the
-        # media attachments. Because otherwise its just too much image. This is a TUI after all.
+        # media attachments. Because otherwise its just too much image.
 
         if self.app.show_images and self.image_url and not self.toot_widget.media_attachments:
             yield ImageViewerWidget(self.image_url, in_card=True, classes="toot_image")

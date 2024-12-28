@@ -11,98 +11,9 @@ SimpleButton:focus {
     color: $text;
 }
 
-# widgets_misc.py
-HashtagWidget {
-    width: 1fr;
-    height: auto;
-    # content-align: right middle;
-    background: $boost;
-    margin: 0 2 1 2;
-    padding: 0 2 0 2;
-}
-
-# widgets_misc.py
-NewsWidget {
-    # layout: grid;
-    # grid-size: 2 2;
-    # grid-columns: auto 1fr;
-    width: 1fr;
-    height: auto;
-    # content-align: right middle;
-    background: $boost;
-    margin: 0 2 1 2;
-    padding: 0;
-}
-
-Collapsible {
-    width: 1fr;
-    height: auto;
-    # content-align: center middle;
-    background: $boost;
-    margin: 0 2 0 2;
-    padding: 0;
-}
-
-
-# # # OPTIONS BAR # # #
-
-# widgets_misc.py
-PageOptionsBar {
-    width: 1fr;
-    min-width: 30;
-    max-width: 100;
-    min-height: 3;
-    height: 3;
-    padding: 0;
-    margin: 0 2 1 2;
-    background: $boost;
-}
-
-.options_sectionbar {
-    width: 1fr;
-    min-width: 5;
-    min-height: 1;
-    height: 1;
-    # padding: 1 4 1 4;
-    margin: 0 2 0 2;
-    content-align: center middle;
-    # background: $boost;
-    align: center middle;
-}
-
-#toot_amount {
-    dock: left;
-    width: 40%;
-    height: 3;
-}
-
-
-
-#options_labels {
-    height: 2;
-    margin: 1 0 0 0;
-}
-
-#toot_amount_label {
-    width: 1fr;
-    height: 1fr;
-    content-align: center middle;
-}
-
-.header_button {
-    width: 15;
-    height: 3;
-    content-align: center middle;
-    margin: 0;
-    padding: 0;
-    dock: right;
-    border: outer $panel;
-}
-
-# # # # # # # # # # # # #
-
+# NewsWidget and HashtagWidget
 .titlebar {
-    background: $boost;
+    background: $secondary-background;
 }
 
 .trend_footer {
@@ -110,7 +21,7 @@ PageOptionsBar {
     width: 1fr;
     height: 2;
     # content-align: center middle;
-    # background: $boost;
+    # background: $surface-lighten-2;
     margin: 0;
     padding: 0;
 }

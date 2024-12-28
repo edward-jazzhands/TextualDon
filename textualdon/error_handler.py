@@ -10,7 +10,7 @@ from rich.traceback import Traceback
 from mastodon import (
     MastodonError, 
     MastodonNetworkError, 
-    MastodonUnauthorizedError
+    MastodonUnauthorizedError,
 )
 from clipman.exceptions import ClipmanBaseException
 
@@ -21,12 +21,12 @@ from textual.containers import Container, Horizontal, VerticalScroll
 from textual.widgets import Button, Label, TextArea
 from textual.dom import DOMNode
 from textual.binding import Binding
-from textual.worker import WorkerError, WorkerFailed
+from textual.worker import WorkerError, WorkerFailed, WorkerCancelled
 from textual.errors import TextualError
 from textual.css.query import NoMatches
 
 # Textualdon Imports
-from textualdon.messages import UpdateBannerMessage
+from textualdon.messages import UpdateBannerMessage, SuperNotify
 from textualdon.simplebutton import SimpleButton
 
 
@@ -112,51 +112,48 @@ class ErrorHandler(DOMNode):
         except: # noqa: E722
             self.log.error("Recursive error cause failed.")
             error_msg_list = [e]
-        self.log(error_msg_list)
-
+        self.log.debug(error_msg_list)
 
         if isinstance(e, WorkerFailed):
-            # If a worker failed, its either going to be the Mastodon Proxy class's "APIRunner",
-            # or it'll be some essential part of the app. So if its Mastdon, we can extract that
-            # and restart this method. But all other workers, assume something is seriously wrong
-            # and just send the worker through.
+            #* If a worker failed, its either going to be the Mastodon Proxy class's "APIRunner",
+            #* or it'll be some essential part of the app.
             if isinstance(e.error, MastodonError):
                 await self.handle_mastodon_error(e.error, error_msg_list)
-                return        
+                return
+            
+        elif isinstance(e, WorkerCancelled):
+            self.log(f"Worker was cancelled: {e}")
+            return
 
         elif isinstance(e, ClipmanBaseException):
-            self.app.post_message(UpdateBannerMessage(f"Clipman failed: {error_msg_list[-1]}"))
+            self.app.post_message(UpdateBannerMessage(f"Clipman +failed: {error_msg_list[-1]}"))
             self.app.notify(f"Clipman failed: {error_msg_list[-1]}")
             return
-
-        elif isinstance(e, MastodonNetworkError) or isinstance(e, MastodonUnauthorizedError):
-            await self.handle_mastodon_error(e, error_msg_list)
-            return
         
-        # Then if we cant handle it in some above manner, save it to the super error dict,
-        # and increase the error_number by 1. We only make an addition and increment the counter
-        # if we can't handle the error in some other way.
-        # Errors are stored until the user disables safe mode.
+        #* Then if we cant handle it in some above manner, save it to the super error dict,
+        #* and increase the error_number by 1. We only make an addition and increment the counter
+        #* if we can't handle the error in some other way.
+        #* Errors are stored until the user disables safe mode.
 
         self.error_number += 1
         self.super_error_dict[self.error_number] = (error_msg_list, self.logfiles)
 
-        # Any exceptions that we can't handle above get written to a log file, then the user
-        # is shown the more serious App Error Screen, which will suggest they restart the program
-        # and consider posting the error to the issue tracker on Github.
+        #* Any exceptions that we can't handle above get written to a log file, then the user
+        #* is shown the more serious App Error Screen, which will suggest they restart the program
+        #* and consider posting the error to the issue tracker on Github.
 
         self.log(f"Current screen stack: {self.app.screen_stack}")
         for screen in self.app.screen_stack:        
             if screen.name == "error_screen":       # prevents having more than 1 error screen.
                 screen.update_errors(self.super_error_dict)
                 return
-                # we only care about logging the traceback once, for the first error.
-                # all other errors are caused by the first error so we don't need to log them.
+                #* we only care about logging the traceback once, for the first error.
+                #* all other errors are caused by the first error so we don't need to log them.
 
         try:
             self.app.enter_safe_mode()
-        except Exception as e:
-            self.log.error("Failed to enter safe mode.")
+        except Exception as safe_error:
+            self.log.error(f"Failed to enter safe mode: {safe_error}")
 
         try:      #~ Here writes error to log file
             await self.record_log_files(e, logfile, loghtml)
@@ -197,25 +194,27 @@ class ErrorHandler(DOMNode):
 
     async def handle_mastodon_error(self, e: Exception, error_msg_list: List):
 
-        # These will mostly be network or permission related errors. We can just notify the user
-        # and continue the program.
+        #* These will mostly be network or permission related errors. We can just notify the user
+        #* and continue the program.
 
         e_str = str(e)
-        e_str = e_str.replace("'", "").split(", ")
-
+        e_str_list:list = e_str.replace("'", "").split(", ")
+        # deepest_e_str = e_str_list[-1]
         deepest_msg = error_msg_list[-1]
 
         if isinstance(e, MastodonNetworkError):
-            deepest_msg = error_msg_list[-1]
             self.app.notify("Network Error: URL doesn't exist, or your internet is down.", timeout=7)
             self.app.post_message(UpdateBannerMessage(f"Mastodon server says: {deepest_msg}"))
             return
         
-        elif isinstance(e, MastodonUnauthorizedError):
-            deepest_msg = e_str[-1]
+        if isinstance(e, MastodonUnauthorizedError):
             self.app.notify(f"Mastodon server says: {deepest_msg}", timeout=7)
             self.app.post_message(UpdateBannerMessage(f"Mastodon server says: {deepest_msg}"))
             return
+
+        self.app.post_message(SuperNotify(f"Mastodon Error: {deepest_msg}"))
+        self.log.debug(f"Mastodon Error: {e_str_list}")
+        
 
     async def push_report_screen(self, result):
         """Callback function from the ErrorScreen."""
@@ -256,21 +255,18 @@ class ErrorHandler(DOMNode):
         try:
             logs = list(self.logs_dir.iterdir())
             if not logs:
-                self.app.post_message(UpdateBannerMessage("No log files to delete."))
-                self.app.notify("No log files to delete.")
+                self.app.post_message(SuperNotify("No log files to delete."))
                 return
             for log in logs:
                 log.unlink()
         except Exception as e:
             self.log.error(f"Error deleting logs: {e}")
-            self.app.post_message(UpdateBannerMessage("Error deleting logs."))
-            self.app.notify("Error deleting logs files.")
+            self.app.post_message(SuperNotify("Error deleting log files"))
         else:
             self.log("Logs deleted.")
-            self.app.post_message(UpdateBannerMessage("Log files deleted."))
-            self.app.notify("Log files deleted.")
+            self.app.post_message(SuperNotify("Log files deleted."))
 
-# Note: I really would have preferred to combine a bunch of commonality of the two screens
+# NOTE: I really would have preferred to combine a bunch of commonality of the two screens
 # here into one parent class. However, one is a regular Screen and the other is a ModalScreen.
 # I'm sure there's a way to make that work but I didn't feel like digging into it right now.
 
@@ -283,19 +279,19 @@ class ErrorScreen(ModalScreen):
         Binding("down,right", "focus_next", description="Focus the next button."),
     ]
 
-    controls = "Arrow keys, Tab/Shift+Tab): navigate | Enter: select | q: quit | i: ignore"   
+    controls = "Arrow keys, Tab/Shift+Tab: navigate | Enter: select | q: quit | i: ignore"   
         
     generic_warning = """TextualDon has encountered an unexpected error. 
 Its recommended to quit the app immediately. If you have something you were working \
 on, you can attempt to hit ignore and save your work. But be warned, there is a chance \
 the app will freeze or crash as soon as you press the ignore button.
 
-For full error information and to file a report, please click 'Read and Report' \n"""
+For full error information and to file a report, please press 'Read and Report' \n"""
 
     db_warning = """The database has encountered an error.
 Ignoring this warning is disabled. The app will not work without the database.
 
-For full error information and to file a report, please click 'Read and Report'  \n"""
+For full error information and to file a report, please press 'Read and Report'  \n"""
 
     mastodon_warning = """The Mastodon connection returned an unexpected error. \n """
 
@@ -337,7 +333,7 @@ For full error information and to file a report, please click 'Read and Report' 
             self.banner = "[red]! DATABASE ERROR ![/red]"
         else:
             self.warning = self.generic_warning
-            self.banner = "[red blink]! ERROR !:[/red blink]"
+            self.banner = "[red blink]! ERROR ![/red blink]"
 
     def compose(self):
 
@@ -410,7 +406,7 @@ class ReportScreen(Screen):
         Binding("down,right", "focus_next", description="Focus the next button."),
     ]
 
-    controls = "Arrow keys, Tab/Shift+Tab): navigate | Enter: select | q: quit | i: ignore"   
+    controls = "Arrow keys, Tab/Shift+Tab: navigate | Enter: select | q: quit | i: ignore"   
     gitrepo_path = "https://github.com/edward-jazzhands/textualdon/issues"
 
     def __init__(

@@ -18,8 +18,7 @@ from textual.validation import Number, ValidationResult
 
 # TextualDon imports
 from textualdon.messages import (
-    UpdateBannerMessage,
-    OnlineStatus,
+    SuperNotify,
     LoginStatus,
     EnableSafeMode,
     TriggerRandomError,
@@ -87,7 +86,8 @@ class Settings(Widget):
             super().__init__()
             self.changed = event
 
-    def compose(self):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         self.mastodon = cast(Mastodon, self.app.mastodon)
         self.db = cast(SQLite, self.app.sqlite)
@@ -104,31 +104,27 @@ class Settings(Widget):
         row8 = self.db.fetchone(sql_query, ("callback_port",))
 
         first_launch: bool = ('True' == row1[0])
-        auto_login:   bool = ('True' == row2[0])
-        auto_load:    bool = ('True' == row3[0])
-        show_images:  bool = ('True' == row4[0])
-        link_behavior: int = int(row5[0])  # 0 = browser, 1 = clipboard, 2 = manual
-        show_on_startup: str = row6[0]
-        hatching:        str = row7[0]
+        self.auto_login:   bool = ('True' == row2[0])
+        self.auto_load:    bool = ('True' == row3[0])
+        self.show_images:  bool = ('True' == row4[0])
+        self.link_behavior: int = int(row5[0])  # 0 = browser, 1 = clipboard, 2 = manual
+        self.show_on_startup: str = row6[0]
+        self.hatching:        str = row7[0]
         self.callback_port: str = row8[0]   # this is a number, but Input expects a string
 
-        # NOTE: self.callback_port is the only attribute we need saved. This is because it has
-        # a feature that resets the number on blur if it does not validate.
-
         if first_launch:
-            self.post_message(UpdateBannerMessage("First launch detected."))
             self.db.update_column("settings", "value", "False", "name", "first_launch")
             self.callback_port = str(random.randint(49152, 65535))
             self.db.update_column("settings", "value", self.callback_port, "name", "callback_port")
         
         self.log.debug(
             f"first_launch: {first_launch} \n"
-            f"auto_login: {auto_login} \n"
-            f"auto_load: {auto_load} \n"
-            f"show_images: {show_images} \n"
-            f"link_behavior: {link_behavior} \n"
-            f"show_on_startup: {show_on_startup} \n"
-            f"hatching: {hatching} \n"
+            f"auto_login: {self.auto_login} \n"
+            f"auto_load: {self.auto_load} \n"
+            f"show_images: {self.show_images} \n"
+            f"link_behavior: {self.link_behavior} \n"
+            f"show_on_startup: {self.show_on_startup} \n"
+            f"hatching: {self.hatching} \n"
             f"callback_port: {self.callback_port} \n"
         )
 
@@ -140,44 +136,47 @@ class Settings(Widget):
             "login_page", "home", "notifications", "explore", "live_feeds",
             "private_mentions", "bookmarks", "favorites", "lists"
         ]
-        select_page_options = [(format(option), option) for option in select_page_options]
+        self.select_page_options = [(format(option), option) for option in select_page_options]
 
         hatching_options = ["none", "left", "right", "cross"]
-        hatching_options = [(format(option), option) for option in hatching_options]
+        self.hatching_options = [(format(option), option) for option in hatching_options]
 
-        link_options = [
+        self.link_options = [
             ("Open in browser", 0),
             ("Copy to clipboard", 1),
             ("Manual", 2)]
 
         self.border_title = "Settings"
 
+    def compose(self):
+
+        yield Static("[middle]Settings with * have a help pop-up toggled with ctrl-k", classes="short_label")
         with Container(classes="settings_container"):
             yield Static("Sign out of current account", classes="settings_text")
             yield SimpleButton(" Logout ", id="logout", classes="settings_button bordered")
 
             yield Static("\nSign in automatically. \n (Uses most recent sign-in)", classes="settings_text")
-            yield Switch(auto_login, id="auto_login", classes="settings_button")
+            yield Switch(self.auto_login, id="auto_login", classes="settings_button")
 
             yield Static("Auto-load page content", classes="settings_text")
-            yield Switch(auto_load, id="auto_load", classes="settings_button")
+            yield Switch(self.auto_load, id="auto_load", classes="settings_button")
 
             yield Static("Show page on startup", classes="settings_text")
             yield Select(
-                select_page_options,
-                value=show_on_startup,
+                self.select_page_options,
+                value=self.show_on_startup,
                 id="show_on_startup",
                 classes="settings_list",
                 allow_blank=False
             ) 
 
             yield Static("Download/Show images", classes="settings_text")
-            yield Switch(show_images, id="show_images", classes="settings_button")
+            yield Switch(self.show_images, id="show_images", classes="settings_button")
 
             yield Static("Link behavior", id="clicklink_desc", classes="settings_text")
             yield Select(
-                link_options,
-                value=link_behavior,
+                self.link_options,
+                value=self.link_behavior,
                 id="link_behavior",
                 classes="settings_list",
                 allow_blank=False
@@ -188,8 +187,8 @@ class Settings(Widget):
 
             yield Static("Background hatching", classes="settings_text")
             yield Select(
-                hatching_options,
-                value=hatching,
+                self.hatching_options,
+                value=self.hatching,
                 id="hatching",
                 classes="settings_list",
                 allow_blank=False
@@ -228,12 +227,13 @@ class Settings(Widget):
     @on(SimpleButton.Pressed, "#logout")
     def logout(self) -> None:
 
-        self.post_message(UpdateBannerMessage("Logging out..."))
-        self.notify("Logged out.")
+        self.post_message(SuperNotify("Logged out."))
         self.app.mastodon = None
         self.app.logged_in_user_id = None
-        self.post_message(OnlineStatus("Status: Offline"))
-        self.post_message(LoginStatus("Logged out."))
+        self.post_message(LoginStatus(
+            statusbar="Status: Offline",
+            loginpage_message="Logged out.",
+        ))
 
     @on(Switch.Changed, "#auto_login")
     def auto_login(self, event: Switch.Changed) -> None:
@@ -270,7 +270,7 @@ class Settings(Widget):
         if event.value == 0:
             desc_static.update("Link behavior: \nOpen URL in a new browser tab.")
         elif event.value == 1:
-            desc_static.update("Link behavior: \nCopy link to clipboard. \nUses Clipman if possible.")
+            desc_static.update("Link behavior: \nCopy link to clipboard.")
         elif event.value == 2:
             desc_static.update("Link behavior: \nProvides pop-up to copy link manually.")
         desc_static.refresh()
@@ -304,7 +304,6 @@ class Settings(Widget):
 
         self.db.update_column("settings", "value", "False", "name", "warning_checkbox_wsl")
         self.db.update_column("settings", "value", "False", "name", "warning_checkbox_first")
-        self.post_message(UpdateBannerMessage("Startup Warnings re-enabled."))
         self.notify("Startup Warnings re-enabled.")
 
     @on(SimpleButton.Pressed, "#view_dev")

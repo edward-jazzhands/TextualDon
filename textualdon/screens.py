@@ -12,6 +12,7 @@ from textual_imageview.viewer import ImageViewer
 
 # Textual imports
 from textual import on
+from textual import events
 from textual.binding import Binding
 from textual.screen import Screen, ModalScreen
 from textual.containers import Container, Horizontal, VerticalScroll
@@ -30,7 +31,7 @@ class TextualdonModalScreen(ModalScreen):
         Binding("down,right", "focus_next", description="Focus the next button."),
     ]
 
-    controls = "Arrow keys (or tab): navigate | Enter: select | Esc: close."
+    controls = "Arrow keys (or tab): navigate | Enter: select | Esc: close"
 
     def action_pop_screen(self):
 
@@ -50,32 +51,21 @@ class TextualdonModalScreen(ModalScreen):
         self.focus_next()
 
 
-class TextualdonScreen(Screen):
+class ImageScreen(Screen):
+    """Called by `ImageViewerWidget.on_click` (widgets.py)
+    Callback: None."""
+    #! TODO the on_click usage in ImageViewerWidget needs fixing.
+    # TODO Add keyboard controls for this.
 
     BINDINGS = [
-        Binding("escape", "pop_screen", key_display='Esc', description="Close the pop-up screen.", show=True),
-        # Binding("up", "focus_previous", description="Focus the previous button."),
-        # Binding("down", "focus_next", description="Focus the next button."),
+        Binding("escape", "dismiss", key_display='Esc', description="Close the image screen."),
+        Binding("i", "zoom_in", description="Zoom the image in."),
+        Binding("o", "zoom_out", description="Zoom the image out."),
+        Binding("up", "pan_up", description="Pan the image up."),
+        Binding("down", "pan_down", description="Pan the image down."),
+        Binding("left", "pan_left", description="Pan the image left."),
+        Binding("right", "pan_right", description="Pan the image right."),
     ]
-
-    # these screens dont have universal controls.
-
-    def action_pop_screen(self):
-
-        self.log.info(f"screen stack: {self.app.screen_stack}")
-        self.app.pop_screen()
-        # screen_stack = self.app.screen_stack
-
-    # def action_focus_previous(self):
-    #     self.focus_previous()
-    
-    # def action_focus_next(self):
-    #     self.focus_next()
-
-
-class ImageScreen(TextualdonScreen):
-    """Called by `ImageViewerWidget.on_click` (widgets.py)"""
-    #! TODO the on_click usage needs fixing.
 
     def __init__(self, image: PIL.Image.Image, **kwargs):
         self.image = image
@@ -86,14 +76,40 @@ class ImageScreen(TextualdonScreen):
             yield ImageViewer(self.image) 
         with Horizontal(classes='screen_buttonbar'):
             yield Button('Close', id='img_close_button')
-            yield Label('Zoom in/out with mousewheel', id='imgview_label')
+            yield Label('i/o and arrows (or mousewheel/drag): Zoom in/out and pan | Esc to close', id='imgview_label')
 
     def on_mount(self):
         self.img_container = self.query_one('#imgview_container')
+        self.img_viewer = self.query_one(ImageViewer)
         self.img_container.can_focus = True         # TODO test if this is necessary
 
     def on_button_pressed(self, button):
-        self.app.pop_screen()
+        self.dismiss()
+
+    def action_zoom_in(self):
+        self.log.info('Zooming in')
+        self.img_viewer.image.zoom(-1)
+        self.img_viewer.refresh()
+
+    def action_zoom_out(self):
+        self.img_viewer.image.zoom(1)
+        self.img_viewer.refresh()
+
+    def action_pan_up(self):
+        self.img_viewer.image.move(0, 2)    # NOTE: the integer values here are actually
+        self.img_viewer.refresh()           # reveresed from how its done in the ImageViewer class.
+
+    def action_pan_down(self):                  # That's because with mouse drag, you always drag up
+        self.img_viewer.image.move(0, -2)       # to pull the image down, and vice versa.
+        self.img_viewer.refresh()               # But with keyboard, its not normally reversed.
+
+    def action_pan_left(self):                  # So we want up key to move the image up, and
+        self.img_viewer.image.move(2, 0)        # Down key to move the image down.
+        self.img_viewer.refresh()
+
+    def action_pan_right(self):                 # Also using 2 instead of 1 to make it more sensitive.
+        self.img_viewer.image.move(-2, 0)
+        self.img_viewer.refresh()
 
 
 class ConfirmationScreen(TextualdonModalScreen):
@@ -138,7 +154,7 @@ class NotImplementedScreen(TextualdonModalScreen):
     - `TootOptionsOtherUser.report_user` (tootoptions.py) 
     - `TootOptionsOtherUser.filter_toot` (tootoptions.py)"""
 
-    controls = "Arrow keys (or tab): navigate | Enter: select | Esc or click anywhere: close."
+    controls = "Arrow keys (or tab): navigate | Enter: select | Esc or click anywhere: close"
 
     def __init__(self, roadmap_name: str, **kwargs):
         super().__init__(**kwargs)
@@ -211,12 +227,12 @@ class FirstWarning(TextualdonModalScreen):
         pass
     controls = "Arrow keys (or tab): navigate | Enter: select"
 
-    first_warning = """[red]First time users:[/red] \n
-Copy to clipboard functionality may not work universally across all environments. \n
-On the other hand, opening a browser window should work for most users but it will not work over SSH. \n
-There's several options provided to get links to your browser. If you're having issues, \
-try a different option in the settings. At least one of them should work. \n
-[red blink]You MUST do this at least once to login to your Mastodon account![/red blink] \n"""
+    first_warning = """First time users: \n
+The Mastodon authentication process will require you to open a browser window \
+at least once to login. \n
+Unfortunately this does not work over SSH yet. It is on the roadmap. \n
+There's 3 options provided to get links into your browser. If one of them \
+isn't working, try a different option. \n"""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -360,7 +376,7 @@ class LinkScreen(TextualdonModalScreen):
         self.dismiss()
 
 
-class CopyPasteTester(TextualdonScreen):
+class CopyPasteTester(TextualdonModalScreen):
     """Called by `Settings.open_tester_screen` (settings.py)
     Callback: None."""
 

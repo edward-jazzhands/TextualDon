@@ -20,7 +20,6 @@ tzlocal = "^5.2"
 clipman = "^3.3.1"
 textual-imageview = { git = "https://github.com/edward-jazzhands/textual-imageview.git", branch = "main" }
 textual-pyfiglet = "^0.5.5"
-textual-spinbox = "^0.7.0"
 humanize = "^4.11.0"
 
 

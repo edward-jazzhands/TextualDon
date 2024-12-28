@@ -1,14 +1,11 @@
 # Note: The max width of the TootWidget is set using the page_box class in pages.tcss
 
-TootWidget {
-    border: blank;
-}
-
-# TootWidget:focus {
-#     border: dashed $primary;
+# TootWidget {
+#     border: blank;
 # }
 
-#toot_container {
+# NOTE: Also used by HashTagWidget, NewsWidget, ProfileWidget
+.content_container {
     width: 1fr;
     height: auto;
     margin: 0;

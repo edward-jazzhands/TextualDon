@@ -9,6 +9,7 @@ from rich.console import RenderableType
 from rich.text import Text #, TextType
 
 from textual.widgets import Static
+from textual.reactive import reactive
 from textual.message import Message
 from textual.binding import Binding
 
@@ -146,7 +147,18 @@ class SimpleButton(Static):
             no_wrap=self.no_wrap,
             overflow=self.overflow
             )
+    
+    def watch_mouse_hover(self, value: bool) -> None:
+        """OVERRIDE: Update from CSS if mouse over state changes.
+        Textual addition: posts HoverEnter / HoverLeave messages."""
 
+        if self._has_hover_style:
+            self._update_styles()
+        if value:
+            self.post_message(self.HoverEnter(self))
+        else:
+            self.post_message(self.HoverLeave(self))
+        
     def on_click(self, event: Click) -> None:
         """Called when the button is clicked. Posts a message 'Pressed'.
         Use the message handler to handle the event:   
@@ -155,18 +167,7 @@ class SimpleButton(Static):
         def on_button_pressed(self, message: SimpleButton.Pressed) -> None:   
             print("Button was pressed!")
         ``` """
-        
         self.post_message(self.Pressed(self))
-
-    def on_enter(self) -> None:
-        """Posts a message on hover which can be handled by the parent widget."""
-        self.post_message(self.HoverEnter(self))
-
-    # NOTE: It might have been more effective to mix in a Reactive element in here somewhere.
-    # something to think about for the future.
-
-    def on_leave(self) -> None:
-        self.post_message(self.HoverLeave(self))
 
     def action_press(self) -> None:
         self.post_message(self.Pressed(self))
