@@ -308,10 +308,9 @@ class NewsWidget(MiscMastoWidget):
 
 
 class ImageViewerWidget(Container):
-    """This is a simple widget that displays an image in a container.
-    It's used across the program to display images. It's controlled by the ImageViewer class.
-    
-    Connected to screens.ImageScreen for fullscreen viewing."""
+    """widget that displays an image in a container. Used in a couple places to display images.
+    Nested in: toot.TootContentContainer.
+    Connected to: screens.ImageScreen for fullscreen viewing."""
 
     def __init__(self, image_url: str, in_card: bool = False, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)

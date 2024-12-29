@@ -413,17 +413,21 @@ class DevelopmentPage(Container):
 class AboutPage(Container):
 
     refresh_allowed = False
-    git_repo = "http://www.github.com/edward-jazzhands/textualdon"
-
-    about_text = f"""TextualDon - by Edward Jazzhands © Copyright 2024 \n
-TextualDon is a Mastodon client built with the Textual framework for Python. \n
-It is a work in progress and is not yet feature complete. \n
-The code is available on GitHub at {git_repo} \n"""
-    
-    refresh_allowed = False
 
     # TODO add link buttons to this page, and more info 
 
     def compose(self):
+        self.git_repo = "http://www.github.com/edward-jazzhands/textualdon"
+
+        about_text = f"""TextualDon {self.app.textualdon_version} \
+- by Edward Jazzhands © Copyright 2024 \n
+TextualDon is a Mastodon client built with the Textual framework for Python. \n
+It is a work in progress and is not yet feature complete. \n"""
+
         yield PageHeader("about", refresh_visible=self.refresh)
-        yield Static(self.about_text, classes="page_box")
+        yield Static(about_text, classes="page_box")
+        yield SimpleButton(self.git_repo, id="github_button", classes="page_box")
+
+    @on(SimpleButton.Pressed, selector="#github_button")
+    def open_github(self) -> None:
+        self.app.handle_link(self.git_repo)

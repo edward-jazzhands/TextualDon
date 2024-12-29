@@ -20,17 +20,17 @@
 PageHeader {
     width: 1fr;
     min-width: 20;
-    max-width: 100;
+    max-width: 98;
     height: 3;
-    padding: 0 1 0 2;
-    margin: 0 1 0 1;
+    padding: 0 0 0 1;
+    margin: 0 2 0 2;
     content-align: left middle;
 }
 
 TimelineSelector {
     width: 100%;
     min-width: 20;
-    max-width: 100;
+    max-width: 98;
     height: 1;
     padding: 0;
     margin: 0 2 0 2;

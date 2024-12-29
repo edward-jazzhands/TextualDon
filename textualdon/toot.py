@@ -304,12 +304,10 @@ class TootWidget(Horizontal):
             return False
 
     def switch_content(self, switch_to: str) -> None:
-        """This is used by more box (TootOptions). Switches normal/html/json mode"""
 
         self.toot_switcher.current = switch_to
 
     def edit_toot(self):
-        """This is used by TootOptions. Switches to edit mode"""
 
         if not self.edit_mode:
             self.switch_content("toot_edit_container")

@@ -146,6 +146,7 @@ class TextualDon(App):
         self.delete_db_on_start = self.config.getboolean("MAIN", "delete_db_on_start")
         self.force_no_clipman   = self.config.getboolean("MAIN", "force_no_clipman")
         self.force_no_pyperclip = self.config.getboolean("MAIN", "force_no_pyperclip")
+        self.textualdon_version = self.config.get("MAIN", "version")
         self.text_insert_time = self.config.getfloat("MAIN", "text_insert_time") #* used in many places
 
         # These are premade figlets for prettying up the dev console.

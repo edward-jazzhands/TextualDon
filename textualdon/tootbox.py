@@ -130,18 +130,19 @@ class TootBox(Container):
         self.saved_text = None
 
     def compose(self):
-        with Container(id="toot_box_container"):
+        with Container(id="toot_box_container", classes="toot_box_container"):
             if self.toot_widget:        # different Bindings if its a reply vs a main toot
                 yield TextAreaReply(id="toot_box_input", classes = "toot_box_input")
             else:
                 yield TextAreaMain(id="toot_box_input", classes = "toot_box_input")
-        with Horizontal(classes="reply_footer"):
-            yield SimpleButton("Post Toot", id="toot_box_reply", classes="toot_box_button")  # always present in center
-            if not self.toot_widget:      # no attached widget means this is the main toot box
-                yield SimpleButton("Search mode", id="toot_box_search", classes="toot_box_button left")
-                yield SimpleButton("Hide", id="toot_box_hide", classes="toot_box_button right")
-            else:                  # attached widget means this is a reply, and we want a cancel button
-                yield SimpleButton("Cancel", id="toot_box_cancel", classes="toot_box_button")
+        with Container(classes="toot_box_container"):
+            with Horizontal(classes="reply_footer"):
+                yield SimpleButton("Post Toot", id="toot_box_reply", classes="toot_box_button")  # always present in center
+                if not self.toot_widget:      # no attached widget means this is the main toot box
+                    yield SimpleButton("Search mode", id="toot_box_search", classes="toot_box_button left")
+                    yield SimpleButton("Hide", id="toot_box_hide", classes="toot_box_button right")
+                else:                  # attached widget means this is a reply, and we want a cancel button
+                    yield SimpleButton("Cancel", id="toot_box_cancel", classes="toot_box_button")
 
     def on_mount(self):
 

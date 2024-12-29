@@ -1,10 +1,6 @@
 # Note: The max width of the TootWidget is set using the page_box class in pages.tcss
 
-# TootWidget {
-#     border: blank;
-# }
-
-# NOTE: Also used by HashTagWidget, NewsWidget, ProfileWidget
+# Note: Also used by HashTagWidget, NewsWidget, ProfileWidget
 .content_container {
     width: 1fr;
     height: auto;
@@ -19,9 +15,7 @@
     grid-columns: 2fr 1fr;
     width: 1fr;
     height: 2;
-    # content-align: center middle;
     background: $secondary-background;
-    # dock: top;
     margin: 0;
     padding: 0;
 }
@@ -32,7 +26,6 @@
     background: $secondary-background;
     margin: 0;
     padding: 0;
-    # color: $text;
 }
 
 .toot_element {
@@ -86,7 +79,6 @@ TootContentContainer {
 #toot_edit_container {
     width: 1fr;
     height: auto;
-    # background: $panel-lighten-1;
     margin: 0;
     padding: 0;
 }
@@ -113,13 +105,13 @@ TootBox {
     padding: 0;
 }
 
-#toot_box_container {
+.toot_box_container {
     width: 1fr;
     height: auto;
     content-align: center middle;
     align: center middle;
     background: $surface;
-    margin: 0;
+    margin: 0 2 0 0;
     padding: 0;
 }
 
@@ -156,7 +148,7 @@ TootBox {
     min-width: 20;
     max-width: 100;
     align: center middle;
-    # background: $boost;
+    content-align: center middle;
     margin: 0;
     padding: 0 1 0 1;
 }
@@ -166,10 +158,8 @@ TootBox {
 TootCardWidget {
     width: 1fr;
     height: auto;
-    # content-align: center middle;
     margin: 0 0 1 0;
     padding: 0 2 0 2;
-    # background: $panel;
 }
 
 .toot_card {
@@ -177,59 +167,29 @@ TootCardWidget {
     border: tall $surface-darken-1;
 }
 
-
-# # # TOOT OPTIONS # # #
-
-TootOptions {
-    width: 1fr;
-    height: 5;
-    content-align: center middle;
-    align: center middle;
-    background: $boost;
-    margin: 0;
-    padding: 0;
-}
-
-.toot_options_menu {
-    width: 1fr;
-    # height: auto;
-    content-align: center middle;
-    align: center middle;
-}
-
 .toot_image {
     width: 1fr;
     height: 17;
     content-align: center middle;
     align: center middle;
-    background: $boost;
     margin: 0;
     padding: 0;
 }
 
 .toot_options_left {
     width: 1fr;
-    # height: 5;
-    # content-align: center middle;
-    # align: center middle;
-    # background: $boost;
     margin: 0;
     padding: 0;
 }
 
 .toot_options_right {
     width: 20;
-    # height: 5;
-    # content-align: center middle;
-    # align: center middle;
-    # background: $boost;
     margin: 0;
     padding: 0;
 }
 
 #toot_tabs {
     height: 3;
-    # min-width: 20;
     width: 1fr;
 }
 

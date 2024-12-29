@@ -34,7 +34,7 @@ class SQLite(DOMNode):
                 This MUST be the same name as your program / main package.
             data_dir: Directory on user's computer where the folder will be created.
             sql_script: The name of the SQL script file to use for setting up the database tables and schema.   
-                Path is relative to the main package directory.
+                Path is relative to the main src directory.
             db_filename: The name the database file will use. If None, name will be `<app_name>.db`.
             del_on_start: Whether to delete the database file on start. Defaults to False.
             name: The name of the widget.

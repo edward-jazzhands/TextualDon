@@ -1,9 +1,9 @@
 # Standard Library Imports
 from __future__ import annotations
-from typing import cast, Any #, TYPE_CHECKING
-# if TYPE_CHECKING:
-#     pass
+from typing import cast, Any
 import time
+from pathlib import Path
+from importlib import resources
 
 # Third party imports
 import clipman
@@ -508,7 +508,8 @@ class RoadmapScreen(TextualdonModalScreen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        with open('Roadmap.md', 'r') as f:
+        roadmap_path = Path(resources.files(self.app.app_name) / "Roadmap.md")
+        with open(roadmap_path, 'r') as f:
             self.roadmap = f.read()
 
     def compose(self):
@@ -520,3 +521,4 @@ class RoadmapScreen(TextualdonModalScreen):
 
     def on_click(self):
         self.dismiss()
+
