@@ -99,18 +99,20 @@ class Settings(Widget):
         row3 = self.db.fetchone(sql_query, ("auto_load",))
         row4 = self.db.fetchone(sql_query, ("show_images",))
         row5 = self.db.fetchone(sql_query, ("link_behavior",))
-        row6 = self.db.fetchone(sql_query, ("show_on_startup",))
-        row7 = self.db.fetchone(sql_query, ("hatching",))
-        row8 = self.db.fetchone(sql_query, ("callback_port",))
+        row6 = self.db.fetchone(sql_query, ("copypaste_engine",))
+        row7 = self.db.fetchone(sql_query, ("show_on_startup",))
+        row8 = self.db.fetchone(sql_query, ("hatching",))
+        row9 = self.db.fetchone(sql_query, ("callback_port",))
 
         first_launch: bool = ('True' == row1[0])
         self.auto_login:   bool = ('True' == row2[0])
         self.auto_load:    bool = ('True' == row3[0])
         self.show_images:  bool = ('True' == row4[0])
-        self.link_behavior: int = int(row5[0])  # 0 = browser, 1 = clipboard, 2 = manual
-        self.show_on_startup: str = row6[0]
-        self.hatching:        str = row7[0]
-        self.callback_port: str = row8[0]   # this is a number, but Input expects a string
+        self.link_behavior:    int = int(row5[0])  # 0 = browser, 1 = clipboard, 2 = manual
+        self.copypaste_engine: int = int(row6[0])  # 0 = textual default, 1 = pyperclip, 2 = clipman 
+        self.show_on_startup: str = row7[0]
+        self.hatching:        str = row8[0]
+        self.callback_port:   str = row9[0]   # this is a number, but Input expects a string
 
         if first_launch:
             self.db.update_column("settings", "value", "False", "name", "first_launch")
@@ -145,6 +147,11 @@ class Settings(Widget):
             ("Open in browser", 0),
             ("Copy to clipboard", 1),
             ("Manual", 2)]
+        
+        self.copypaste_options = [
+            ("Textual default", 0),
+            ("Pyperclip", 1),
+            ("Clipman", 2)]
 
         self.border_title = "Settings"
 
@@ -182,6 +189,15 @@ class Settings(Widget):
                 allow_blank=False
             )
 
+            yield Static("Copy/Paste engine", classes="settings_text")
+            yield Select(
+                self.copypaste_options,
+                value=self.copypaste_engine,
+                id="copypaste_engine",
+                classes="settings_list",
+                allow_blank=False
+            )
+
             yield Static("Copy/Paste Tester", id="copytest_label", classes="settings_text")
             yield SimpleButton(" Open ", id="copy_paste_tester", classes="settings_button bordered")
 
@@ -215,13 +231,23 @@ class Settings(Widget):
 
     def on_mount(self):
 
-        if self.app.clipman_works:
+        issues = 0
+        if not self.app.clipman_works:
+            issues += 1
+        if not self.app.pyperclip_works:
+            issues += 1
+
+        if issues == 0:
             self.query_one("#copytest_label").update(
-                "Copy/Paste Tester \n Test Status: [green](Clipman works)[/green]"
+                "Copy/Paste Tester \n Test Status: [green](All Passed)[/green]"
             )
-        else:
+        elif issues == 1:
             self.query_one("#copytest_label").update(
-                "Copy/Paste Tester \n Test Status: [red](Clipman not working)[/red]"
+                "Copy/Paste Tester \n Test Status: [yellow](1 Issue)[/yellow]"
+            )
+        elif issues == 2:
+            self.query_one("#copytest_label").update(
+                "Copy/Paste Tester \n Test Status: [red](2 Issues)[/red]"
             )
 
     @on(SimpleButton.Pressed, "#logout")
@@ -274,6 +300,14 @@ class Settings(Widget):
         elif event.value == 2:
             desc_static.update("Link behavior: \nProvides pop-up to copy link manually.")
         desc_static.refresh()
+
+    @on(Select.Changed, "#copypaste_engine")
+    def copy_paste_engine(self, event: Select.Changed) -> None:
+        
+        self.db.update_column("settings", "value", str(event.value), "name", "copypaste_engine")
+        self.app.copypaste_engine = event.value
+        self.log.debug(f"self.app.copypaste_engine: {self.app.copypaste_engine}")
+
 
     @on(SimpleButton.Pressed, "#copy_paste_tester")
     def open_tester_screen(self) -> None:

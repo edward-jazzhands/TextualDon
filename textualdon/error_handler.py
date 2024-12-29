@@ -11,8 +11,10 @@ from mastodon import (
     MastodonError, 
     MastodonNetworkError, 
     MastodonUnauthorizedError,
+    MastodonNotFoundError
 )
 from clipman.exceptions import ClipmanBaseException
+from pyperclip import PyperclipException
 
 # Textual Imports
 from textual import on
@@ -130,6 +132,11 @@ class ErrorHandler(DOMNode):
             self.app.notify(f"Clipman failed: {error_msg_list[-1]}")
             return
         
+        elif isinstance(e, PyperclipException) or "clip.exe" in str(e).lower():
+            self.app.post_message(UpdateBannerMessage(f"Pyperclip +failed: {error_msg_list[-1]}"))
+            self.app.notify(f"Pyperclip failed: {error_msg_list[-1]}")
+            return
+        
         #* Then if we cant handle it in some above manner, save it to the super error dict,
         #* and increase the error_number by 1. We only make an addition and increment the counter
         #* if we can't handle the error in some other way.
@@ -197,6 +204,7 @@ class ErrorHandler(DOMNode):
         #* These will mostly be network or permission related errors. We can just notify the user
         #* and continue the program.
 
+        self.log.debug(f"Mastodon Error type: {type(e)}")
         e_str = str(e)
         e_str_list:list = e_str.replace("'", "").split(", ")
         # deepest_e_str = e_str_list[-1]
@@ -210,6 +218,10 @@ class ErrorHandler(DOMNode):
         if isinstance(e, MastodonUnauthorizedError):
             self.app.notify(f"Mastodon server says: {deepest_msg}", timeout=7)
             self.app.post_message(UpdateBannerMessage(f"Mastodon server says: {deepest_msg}"))
+            return
+
+        if isinstance(e, MastodonNotFoundError):
+            self.app.post_message(SuperNotify("404: Requested record not found."))
             return
 
         self.app.post_message(SuperNotify(f"Mastodon Error: {deepest_msg}"))
@@ -347,9 +359,9 @@ For full error information and to file a report, please press 'Read and Report' 
                 yield Label(f'{type(self.exception).__name__}: {self.error_msg_list[-1]}', classes='screen_label left')
             yield SimpleButton("Read & Report", id='read_report', classes='screen_button')
             with Horizontal(classes='screen_buttonbar'):
-                yield Button('Ignore', id='ignore', classes='popup_button')
-                yield Button('Quit', id='quit', classes='popup_button')
-        with Container(classes='screen_container wide help error'):
+                yield Button('Ignore', id='ignore', classes='screen_button large')
+                yield Button('Quit', id='quit', classes='screen_button large')
+        with Container(classes='screen_container wide help'):
             yield Label(self.controls, classes='screen_label')
 
     def on_mount(self):
@@ -450,9 +462,9 @@ class ReportScreen(Screen):
                 yield TextArea(id="link_box", read_only=True, classes="link_box")
                 yield TextArea(id="github_link", read_only=True, classes="link_box")
                 with Horizontal(classes='screen_buttonbar'):
-                    yield Button('Ignore & return', id='ignore', classes='popup_button')
-                    yield Button('Quit', id='quit', classes='popup_button')
-            with Container(classes='screen_container wide help error'):
+                    yield Button('Ignore & return', id='ignore', classes='screen_button large')
+                    yield Button('Quit', id='quit', classes='screen_button large')
+            with Container(classes='screen_container wide help'):
                 yield Label(self.controls, classes='screen_label')
 
     def on_mount(self):
@@ -496,6 +508,11 @@ class ReportScreen(Screen):
                         maintain_selection_offset=False
                     )
 
+        # key 1 = first error, 2 = second error, etc
+        # Each value is a tuple of the error message list and the log files list.
+        # [1][0][0] = first error, error message list, first error message
+        # [1][1][0] = first error, log files list, first log file path
+
         self.query_one('#link_box').insert(str(self.super_error_dict[1][1][0]))
         self.query_one('#github_link').insert(self.gitrepo_path)
 
@@ -516,14 +533,14 @@ class ReportScreen(Screen):
 
     @on(SimpleButton.Pressed, selector='#copy_path')
     def copy_path(self):
-        self.app.copy_to_clipboard(self.super_error_dict[1][1][0])      # (•ᴗ•،،)
+        self.app.copy_to_clipboard(self.super_error_dict[1][1][0])  #  [1][1][0] = log file text
 
     @on(SimpleButton.Pressed, selector='#open_browser')
     def read_report(self):
-        self.app.handle_link(self.super_error_dict[1][1][1])
+        self.app.open_browser(self.super_error_dict[1][1][1])   # [1][1][1] = log file html
 
     @on(SimpleButton.Pressed, selector='#open_github')
-    def copy_html(self):
+    def open_github(self):
         self.app.handle_link(self.gitrepo_path)
 
     ###~ Keybindings ~###

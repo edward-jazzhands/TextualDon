@@ -276,6 +276,7 @@ class OAuthWidget(Container):
                 client_secret= client_secret,       # Following times are handled in savedusers.py
                 api_base_url = instance_url,
                 version_check_mode='none',
+                request_timeout=3
             )     
         except Exception as e:
             raise e                                       

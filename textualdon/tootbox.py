@@ -2,7 +2,6 @@
 from __future__ import annotations
 from typing import cast
 import uuid
-from functools import partial
 
 # Textual Imports
 from textual import on
@@ -30,9 +29,13 @@ class TextAreaMain(TextArea):
     class Search(Message):
         pass
 
+    class Hide(Message):
+        pass
+
     BINDINGS = [
         Binding("ctrl+e", "submit", "Submit", show=True),
         Binding("ctrl+f", "search", "Search", show=True),
+        Binding("ctrl+b", "hide", "Hide", show=True),
         Binding(key="f6", action="bookmarks", description="Bookmarks", key_display="F6", show=False),
         Binding(key="f7", action="favorites", description="Favorites", key_display="F7", show=False),
     ]
@@ -42,6 +45,10 @@ class TextAreaMain(TextArea):
 
     def action_search(self):
         self.post_message(self.Search())
+
+    def action_hide(self):
+        self.screen.focus_next()
+        self.post_message(self.Hide())
 
     # Overwriting F6 and F7 is a really hacky way to solve this problem. I'd prefer to be able
     # to remove the bindings from the list. But I can't find a way to do that.
@@ -168,30 +175,26 @@ class TootBox(Container):
         self.input_box.text = text
         self.focus_tootbox()
 
-    def set_memory_text(self, text: str):
-        self.query_one("#toot_box_input").value = text
-
     @on(SimpleButton.Pressed, selector="#toot_box_cancel")
     def cancel_reply(self):
         self.toot_widget.replybox_on = False
         self.remove()
 
+    @on(TextAreaMain.Search)
     @on(SimpleButton.Pressed, selector="#toot_box_search")
     def search_mode(self):
-        self.app.push_screen(NotImplementedScreen('Search mode'))  # TODO Implement
-
-    @on(TextAreaMain.Search)
-    def key_search(self):
         self.log.debug("Search key pressed")
-        self.search_mode()
+        self.app.push_screen(NotImplementedScreen('Search mode', classes="modal_screen"))  # TODO Implement
 
-    @on(TextAreaMain.Submit)
-    async def key_submit_main(self):
-        self.log.debug("Submit key pressed")
-        await self.post_toot()
+
+    @on(TextAreaMain.Hide)
+    async def key_hide(self):
+        self.log.debug("Hide key pressed")
+        await self.hide_tootbox()
 
     @on(TextAreaReply.Submit)
-    async def key_submit_reply(self):
+    @on(TextAreaMain.Submit)
+    async def key_submit(self):
         self.log.debug("Submit key pressed")
         await self.post_toot()
 
@@ -241,12 +244,17 @@ class TootBox(Container):
                 self.toot_widget.replybox_on = False
                 self.toot_widget.refresh_toot()
 
+    def set_memory_text(self):
+        self.set_text(self.saved_text)
+        self.saved_text = None
+
     @on(SimpleButton.Pressed, selector="#toot_box_hide")
     async def hide_tootbox(self) -> None:
         if self.hidden:
             self.hidden = False
             self.toot_box_container.mount(TextAreaMain(id="toot_box_input", classes="toot_box_input"))
             self.query_one("#toot_box_hide").update("Hide")
+            self.query_one("#toot_box_hide").can_focus = False
             self.query_one("#toot_box_reply").visible = True
             self.query_one("#toot_box_search").visible = True
             self.set_styles("height: auto;")
@@ -254,15 +262,15 @@ class TootBox(Container):
 
             # this saves what the user was typing if they hide the box and then show it again
             if self.saved_text:
-                self.set_timer(self.app.text_insert_time, partial(self.set_memory_text, self.saved_text))
-                self.saved_text = None
+                self.set_timer(self.app.text_insert_time, self.set_memory_text)
         else:
-            if self.input_box.text != "":               # if the input is not empty, save it
+            if self.input_box.text != "":           # if the input is not empty, save it
                 self.log(f"Saving text: {self.input_box.text}")
                 self.saved_text = self.input_box.text
             self.hidden = True
             self.query_one("#toot_box_input").remove()
             self.query_one("#toot_box_hide").update("Show")
+            self.query_one("#toot_box_hide").can_focus = True
             self.query_one("#toot_box_reply").visible = False
             self.query_one("#toot_box_search").visible = False
             self.set_styles("height: 1;")

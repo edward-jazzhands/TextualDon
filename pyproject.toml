@@ -18,9 +18,10 @@ textual-dev = "^1.6.1"
 platformdirs = "^4.3.6"
 tzlocal = "^5.2"
 clipman = "^3.3.1"
-textual-imageview = { git = "https://github.com/edward-jazzhands/textual-imageview.git", branch = "main" }
 textual-pyfiglet = "^0.5.5"
 humanize = "^4.11.0"
+textual-imageview = "^0.1.1"
+pyperclip = "^1.9.0"
 
 
 [build-system]

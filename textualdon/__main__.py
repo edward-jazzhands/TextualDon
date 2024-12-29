@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 # third party imports
 from mastodon import MastodonError      # for testing
+import pyperclip
 import clipman
 from clipman.exceptions import ClipmanBaseException
 from platformdirs import user_data_dir
@@ -25,7 +26,8 @@ from textual_pyfiglet.pyfiglet import figlet_format
 
 # Textual imports
 from textual import work
-from textual.reactive import reactive
+from textual.message import Message
+# from textual.reactive import reactive
 from textual.errors import TextualError     # for testing
 from textual.worker import Worker, WorkerState #, WorkerFailed
 from textual.events import Resize
@@ -61,13 +63,14 @@ from textualdon.messages import (
     EnableSafeMode,
     TriggerRandomError,
     ExceptionMessage,
-    DeleteLogs
+    DeleteLogs,
+    OpenRoadmap
 )
 from textualdon.screens import (
     WSLWarning,
     FirstWarning,
     LinkScreen,
-    # CallbackScreen
+    RoadmapScreen
 )
 
 # Rich imports and setup
@@ -78,6 +81,9 @@ traceback.install()                 # setup functions must go after imports or r
         
 
 class TextualDon(App):
+
+    class CheckResult(Message):
+        pass
 
     CSS_PATH = [
         "css/main.tcss",
@@ -139,12 +145,13 @@ class TextualDon(App):
         ##~ Development settings ~##
         self.delete_db_on_start = self.config.getboolean("MAIN", "delete_db_on_start")
         self.force_no_clipman   = self.config.getboolean("MAIN", "force_no_clipman")
-        self.text_insert_time = self.config.getfloat("MAIN", "text_insert_time") #* global
+        self.force_no_pyperclip = self.config.getboolean("MAIN", "force_no_pyperclip")
+        self.text_insert_time = self.config.getfloat("MAIN", "text_insert_time") #* used in many places
 
         # These are premade figlets for prettying up the dev console.
         # Because I'm just super fancy like that.
-        self.breaker_figlet = figlet_format("-----------", font="smblock").strip() + "\n"   #* global
-        self.logo_figlet = figlet_format("  TextualDon  ", font="smblock")                  #* global
+        self.breaker_figlet = figlet_format("-----------", font="smblock").strip() + "\n"  
+        self.logo_figlet = figlet_format("  TextualDon  ", font="smblock")
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -190,8 +197,15 @@ class TextualDon(App):
         else:
             try:
                 self.clipman_works = self.test_clipman()
-            except:  # noqa     # if clipman fails to initialize, it'll just use the regular clipboard
+            except:  # noqa
                 self.clipman_works = False
+        if self.force_no_pyperclip:
+            self.pyperclip_works = False
+        else:
+            try:
+                self.pyperclip_works = self.test_pyperclip()
+            except: # noqa
+                self.pyperclip_works = False
 
         self.log(
             f"Current OS: {self.current_os}\n"
@@ -199,6 +213,7 @@ class TextualDon(App):
             f"Python version: {platform.python_version()}\n"
             f"WSL: {self.WSL}\n"
             f"Clipman available: {self.clipman_works}\n"
+            f"Pyperclip available: {self.pyperclip_works}\n"
             f"Database location: \n{self.sqlite.user_db_path}\n"
         )
 
@@ -256,11 +271,13 @@ class TextualDon(App):
         self.log(Text(f"Initialization complete. \n {self.breaker_figlet}", style="green"))
 
         row1 = self.sqlite.fetchone("SELECT value FROM settings WHERE name= ?", ("show_images",))
-        row2 = self.sqlite.fetchone("SELECT value FROM settings WHERE name= ?", ("link_behavior",))
-        row3 = self.sqlite.fetchone("SELECT value FROM settings WHERE name= ?", ("auto_load",))
+        row2 = self.sqlite.fetchone("SELECT value FROM settings WHERE name= ?", ("auto_load",))
+        row3 = self.sqlite.fetchone("SELECT value FROM settings WHERE name= ?", ("link_behavior",))
+        row4 = self.sqlite.fetchone("SELECT value FROM settings WHERE name= ?", ("copypaste_engine",))
         self.show_images    = (row1[0] == "True")
-        self.link_behavior  = int(row2[0])          # 0 = open in browser, 1 = copy to clipboard
-        self.autoload_value = (row3[0] == "True")
+        self.autoload_value = (row2[0] == "True")
+        self.link_behavior    = int(row3[0])       # 0 = open in browser, 1 = copy to clipboard, 2 = helper popup
+        self.copypaste_engine = int(row4[0])       # 0 = clipman, 1 = pyperclip, 2 = built-in
 
         warning_checkbox_wsl  = self.sqlite.fetchone("SELECT value FROM settings WHERE name= ?", ("warning_checkbox_wsl",))
         warning_checkbox_wsl  = (warning_checkbox_wsl[0] == "True")
@@ -279,10 +296,42 @@ class TextualDon(App):
         self.oauth_widget.saved_users_manager.check_auto_login() 
 
     def attach_mastodon(self, mastodon: Mastodon):
-        """The proxy class centralizes the error handling for the Mastodon API."""
+        """The proxy class runs all calls to the Mastodon API in a worker thread. \n"""
 
         self.log("Attaching Mastodon object.")
         self.mastodon = MastodonProxy(mastodon)
+
+    @on(CheckResult)
+    def check_result(self):
+        """Sends message if API call is hanging"""
+
+        def internal_check():
+            if self.api_startflag and not self.api_finishflag:
+                workers = list(self.workers._workers)
+                self.log.debug(f"HIT 2 SECONDS. ACTIVE WORKERS: {workers}")
+                self.post_message(SuperNotify("This is taking a long time..."))
+            
+        self.set_timer(2, internal_check)   #~ 2 seconds for notification.
+
+    @work(thread=True, exit_on_error=False, group="api_call", exclusive=False)    
+    def run_api_call(self, attr, *args, **kwargs):
+        """This is used by the Mastodon proxy class in proxy.py
+        Would have preferred to put it in that class but it did not work for strange reasons."""
+
+        print(f"Running API call: {attr} with args: {args}, kwargs: {kwargs}")
+
+        self.post_message(self.CheckResult())   # used above ^
+        self.api_startflag = True
+        self.api_finishflag = False
+        
+        try:
+            api_result = attr(*args, **kwargs)
+        except Exception as e:
+            raise e
+        else:
+            return api_result
+        finally:
+            self.api_finishflag = True
 
     @contextmanager
     def capture_exceptions(self):
@@ -305,7 +354,8 @@ class TextualDon(App):
 
     @on(ExceptionMessage)
     async def handle_exception(self, event: ExceptionMessage):
-        """All exceptions are sent here for handling."""
+        """Exceptions caught with capture_exceptions (above) are sent here for transfer to
+        async error handler class."""
         try:
             await self.error_handler.handle_exception(event.exception)
         except Exception as e:
@@ -355,18 +405,15 @@ class TextualDon(App):
             self.push_screen(LinkScreen(link, classes="modal_screen"))
 
     def test_clipman(self) -> bool:
-        """This is a test to see if the user is running on a system that supports clipman."""
-        self.log.debug("Clipman intialized. Testing...")
 
         clipman.init()
-
         # save original clipboard contents. Don't want to piss off the user ;)
         current_clipboard = clipman.paste()
 
-        clipman.copy("This is a test.")
+        clipman.copy("cuExOGZorS")
         foo = clipman.paste()
 
-        if foo == "This is a test.":
+        if foo == "cuExOGZorS":
             self.log.debug("Clipman test successful.")
             testpass = True
         else:
@@ -375,28 +422,40 @@ class TextualDon(App):
 
         clipman.copy(current_clipboard)
         return testpass
+    
+    def test_pyperclip(self):
 
-    def copy_with_clipman(self, link: str):
+        # save original clipboard contents. Don't want to piss off the user ;)
+        current_clipboard = pyperclip.paste()
 
-        with self.capture_exceptions():
-            clipman.copy(link)
+        pyperclip.copy("4ECqwBMwTS")
+        foo = pyperclip.paste()
+
+        if foo == "4ECqwBMwTS":
+            self.log.debug("Pyperclip test successful.")
+            testpass = True
+        else:
+            self.log.error("Pyperclip test failed.")
+            testpass = False
+
+        pyperclip.copy(current_clipboard)
+        return testpass
 
     def copy_to_clipboard(self, text: str | Path) -> None:
-        """ This is overriding the original method from textual.app.App.
-        Uses clipman if available, otherwise uses the original method. 
-        Also can accept a Path object. Clipman will accept a Path object,
-        or if no clipman available it will convert it to a string. """
 
-        # if isinstance(text, Path):    # TODO more testing with this on different OSes
-        #     text = text.as_uri()
+        with self.capture_exceptions():
+            if self.copypaste_engine == 0:
+                super().copy_to_clipboard(text)
+                self.log.debug("Copied to clipboard with built-in method.")
+            elif self.copypaste_engine == 1:
+                pyperclip.copy(text)
+                self.log.debug("Copied to clipboard with Pyperclip.")
+            elif self.copypaste_engine == 2:
+                clipman.copy(text)
+                self.log.debug("Copied to clipboard with Clipman.")
 
-        if self.clipman_works:
-            self.copy_with_clipman(text)
-        else:
-            if isinstance(text, Path):
-                text = str(text)
-            super().copy_to_clipboard(text)
-        self.notify("Copied to clipboard.")
+        if not self.error:
+            self.notify("Copied to clipboard.")
 
     def get_history_data(self, history: list[dict]) -> tuple[list[int], int, int]:
 
@@ -406,10 +465,51 @@ class TextualDon(App):
         past_week = sum(counts_list)
         return counts_list, past_2_days, past_week
 
+    @work(exclusive=True, thread=True, group='browser')
+    async def open_browser(self, url):
+
+        if url is None:
+            self.log.error("No URL provided to open_browser.")
+            return
+        
+        if isinstance(url, Path):
+            # check that Path exists first
+            if not url.exists():
+                self.log.error(f"File does not exist: {url}")
+                return
+            else:
+                self.log.debug(f"Confirmed file exists: {url}")
+            url = url.as_uri()
+
+        self.log.debug(f"Opening browser to: {url}")
+
+        if self.error:  # need to check if there's already an error (we're on the reporting screen)
+            try:
+                result = webbrowser.open(url, new=2, autoraise=False)    # 2 = new tab
+            except:  # noqa         # we're already on the error screen, so swallow any new errors
+                pass
+            if not result:
+                self.log.error("Failed to open browser.")
+                self.notify("Failed to open browser.", timeout=3)
+            else:
+                self.notify("Browser opened.", timeout=3)
+        else:
+            with self.capture_exceptions():
+                result = webbrowser.open(url, new=2, autoraise=False)    # 2 = new tab
+            if self.error:
+                return
+            self.log.debug(f"Browser open result: {result}")
+            if result:
+                self.notify("Browser opened.", timeout=3)
+            else:
+                self.notify("Failed to open browser.", timeout=3)
+
     ###~ EVENT HANDLERS ~###
 
     @on(LoginComplete)
     async def login_complete(self):
+        """Event sent by OauthWidget.login_stage5 when it completes.
+        Refreshes page if auto-load is enabled. """
 
         self.log.debug(Text("Auto-loading is enabled.", style="yellow"))
 
@@ -420,7 +520,11 @@ class TextualDon(App):
 
     @on(ScrollToWidget)
     def scroll_to_widget(self, event: ScrollToWidget) -> None:
-        """Allows scrolling the main scroll area to a specific widget on the page."""
+        """Allows scrolling the main scroll area to a specific widget on the page.
+        Used by:
+        - app.focus_login 
+        - toot.TextAreaEdit.focus (overridden method)
+        - tootbox.TextAreaReply.focus (overridden method)"""
 
         self.log.debug(f"Scrolling to widget: {event.widget}")
         self.main_scroll.scroll_to_center(event.widget)
@@ -438,14 +542,15 @@ class TextualDon(App):
 
         if message == "follow":
 
-            if relation['following']:
-                await self.mastodon.account_unfollow(account["id"])
-                self.log.debug(f"Unfollowed {account['display_name']}")
-                self.post_message(SuperNotify(f"Unfollowed {account['display_name']}"))  
-            else:
-                await self.mastodon.account_follow(account["id"])
-                self.log.debug(f"Followed {account['display_name']}")
-                self.post_message(SuperNotify(f"Followed {account['display_name']}"))
+            with self.capture_exceptions():
+                if relation['following']:
+                    await self.mastodon.account_unfollow(account["id"])
+                    self.log.debug(f"Unfollowed {account['display_name']}")
+                    self.post_message(SuperNotify(f"Unfollowed {account['display_name']}"))  
+                else:
+                    await self.mastodon.account_follow(account["id"])
+                    self.log.debug(f"Followed {account['display_name']}")
+                    self.post_message(SuperNotify(f"Followed {account['display_name']}"))
 
         elif message == "profile":
 
@@ -453,7 +558,7 @@ class TextualDon(App):
             user_page.update_user(account, relation)
             self.post_message(SwitchMainContent("user_page"))
             self.post_message(UpdateBannerMessage(f"Viewing profile for {account['display_name']}"))
-            await user_page.start_refresh_page()
+            await user_page.start_refresh_page()    # all pages have this method
 
     @on(CallbackSuccess)
     def handle_callback_success(self):
@@ -509,6 +614,8 @@ class TextualDon(App):
 
             if self.autoload_value and page_obj.refresh_allowed:
                 await page_obj.start_refresh_page()
+            
+        self.screen.focus_next()
 
     @on(ExamineToot)
     async def examine_toot(self, event: ExamineToot) -> None:
@@ -534,45 +641,6 @@ class TextualDon(App):
 
         # The above refreshing is to make it instantly show the new hatching.
         # It does not instantly update without the manual refreshing.
-
-    @work(exclusive=True, thread=True, group='browser')
-    async def open_browser(self, url):
-
-        if url is None:
-            self.log.error("No URL provided to open_browser.")
-            return
-        
-        if isinstance(url, Path):
-            # check that Path exists first
-            if not url.exists():
-                self.log.error(f"File does not exist: {url}")
-                return
-            else:
-                self.log.debug(f"Confirmed file exists: {url}")
-            url = url.as_uri()
-
-        self.log.debug(f"Opening browser to: {url}")
-
-        if self.error:  # need to check if there's already an error (we're on the reporting screen)
-            try:
-                result = webbrowser.open(url, new=2, autoraise=False)    # 2 = new tab
-            except:  # noqa         # we're already on the error screen, so swallow any new errors
-                pass
-            if not result:
-                self.log.error("Failed to open browser.")
-                self.notify("Failed to open browser.", timeout=3)
-            else:
-                self.notify("Browser opened.", timeout=3)
-        else:
-            with self.capture_exceptions():
-                result = webbrowser.open(url, new=2, autoraise=False)    # 2 = new tab
-            if self.error:
-                return
-            self.log.debug(f"Browser open result: {result}")
-            if result:
-                self.notify("Browser opened.", timeout=3)
-            else:
-                self.notify("Failed to open browser.", timeout=3)
 
     @on(EnableSafeMode)
     def enter_safe_mode(self):
@@ -610,6 +678,11 @@ class TextualDon(App):
     async def delete_logs(self):
 
         await self.error_handler.delete_logs()
+
+    @on(OpenRoadmap)
+    async def open_roadmap(self):
+
+        await self.push_screen(RoadmapScreen(classes="fullscreen"))
 
     ###~ ACTIONS ~###
 
@@ -676,12 +749,6 @@ class TextualDon(App):
 
     @on(Worker.StateChanged)
     def worker_state_changed(self, event: Worker.StateChanged) -> None:
-
-        self.log.debug(Text(
-                f"Worker.state: {event.state}\n"
-                f"Worker.name: {event.worker.name}",
-                style="cyan"
-        ))
 
         if event.state == WorkerState.SUCCESS:
             self.log(Text(f"Worker {event.worker.name} completed successfully", style="green"))

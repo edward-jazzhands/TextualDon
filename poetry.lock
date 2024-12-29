@@ -1082,6 +1082,16 @@ files = [
 windows-terminal = ["colorama (>=0.4.6)"]
 
 [[package]]
+name = "pyperclip"
+version = "1.9.0"
+description = "A cross-platform clipboard module for Python. (Only handles plain text for now.)"
+optional = false
+python-versions = "*"
+files = [
+    {file = "pyperclip-1.9.0.tar.gz", hash = "sha256:b7de0142ddc81bfc5c7507eea19da920b92252b548b96186caf94a5e2527d310"},
+]
+
+[[package]]
 name = "python-dateutil"
 version = "2.9.0.post0"
 description = "Extensions to the standard Python datetime module"
@@ -1240,19 +1250,15 @@ version = "0.1.1"
 description = "A simple terminal-based image viewer."
 optional = false
 python-versions = ">=3.7"
-files = []
-develop = false
+files = [
+    {file = "textual_imageview-0.1.1-py3-none-any.whl", hash = "sha256:335c8043e2f1f735b1b2ec1753a743d6762578175cd2cedae3ce67e2694800a4"},
+    {file = "textual_imageview-0.1.1.tar.gz", hash = "sha256:4299d8ed677db0adb8fe945687470cf1421dcafd2a5dddab54b6ee8ef2ab3320"},
+]
 
 [package.dependencies]
 pillow = ">=9.4.0"
 rich = ">=13.0.0"
 textual = ">=0.9.1"
-
-[package.source]
-type = "git"
-url = "https://github.com/edward-jazzhands/textual-imageview.git"
-reference = "main"
-resolved_reference = "e2c3c81d896da711582b0c1f97f99b4b5261b2c4"
 
 [[package]]
 name = "textual-pyfiglet"
@@ -1814,4 +1820,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "04ef4e883e8f656012f13d923be67cc596543aae1b7c470405b0710ad41662d0"
+content-hash = "987911c68da3be329e0210b93164f95baebdd450a988ccc95c1d680709a1a209"

@@ -106,24 +106,28 @@ class Page(Container):
         }
         css_class = css_dict[widget_type]
 
-        children = list(self.query_children().results())
-        self.log.debug(f"children: {children}")
-        to_remove = []
-        for child in children:
-            if isinstance(child, PageHeader) or isinstance(child, TimelineSelector):
-                pass                 # dont want to remove the headers
-            else:
-                to_remove.append(child)
-        await self.remove_children(to_remove)  
-
         method_obj = getattr(self.app.mastodon, method)
-        json_response = await method_obj(*args, **kwargs)
+        json_response = None
+        with self.app.capture_exceptions():
+            json_response = await method_obj(*args, **kwargs)
+        if json_response:
+        
+            children = list(self.query_children().results())
+            self.log.debug(f"children: {children}")
+            to_remove = []
+            for child in children:
+                if isinstance(child, PageHeader) or isinstance(child, TimelineSelector):
+                    pass                 # dont want to remove the headers
+                else:
+                    to_remove.append(child)
+            await self.remove_children(to_remove)  
 
-        widgets = [
-            widget_type(name=f"{widget_type}_{index}", json=json, classes=f"page_box {css_class}") 
-            for index, json in enumerate(json_response)
-        ]
-        await self.mount_all(widgets)
+            if not self.app.error:
+                widgets = [
+                    widget_type(name=f"{widget_type}_{index}", json=json, classes=f"page_box {css_class}") 
+                    for index, json in enumerate(json_response)
+                ]
+                await self.mount_all(widgets)
 
     @on(Worker.StateChanged)
     def worker_state_changed(self, event: Worker.StateChanged) -> None:
@@ -222,7 +226,7 @@ class ExplorePage(Page):
             await self._refresh_page(TootWidget, "trending_statuses", limit=self.limit)
 
         if self.timeline == "explore_people":
-            self.app.push_screen(NotImplementedScreen("Explore People"))
+            self.app.push_screen(NotImplementedScreen("More pages"))
 
 
 class LiveFeeds(Page):
@@ -333,25 +337,29 @@ class TootPage(Page):
     async def refresh_page(self):
         """The logic here is too compex to re-use the _refresh_page method."""
 
-        self.json = await self.app.mastodon.status(self.main_toot_id)
-        await self.remove_children()
+        json_single, json_response = None, None
+        with self.app.capture_exceptions():
+            json_single   = await self.app.mastodon.status(self.main_toot_id)
+            json_response = await self.app.mastodon.status_context(self.main_toot_id)  
+        if json_single and json_response:
 
-        # first mount the main toot
-        self.mount(TootWidget(name=f"toot_{self.main_toot_id}", json=self.json, classes="page_box toot"))
-        json_response = await self.app.mastodon.status_context(self.main_toot_id)      
+            await self.remove_children()
 
-        # ancestors = json_response["ancestors"]       #! TODO not implemented yet
-        descendants = json_response["descendants"]
+            # first mount the main toot
+            self.mount(TootWidget(name=f"toot_{self.main_toot_id}", json=json_single, classes="page_box toot"))     
 
-        # mount 'Replies' label
-        self.mount(FigletWidget('Replies', font="small", classes="page_box figlet"))
+            # ancestors = json_response["ancestors"]       #! TODO not implemented yet
+            descendants = json_response["descendants"]
 
-        widgets = [
-            TootWidget(name=f"toot_{index}", json=json, classes="page_box toot") 
-            for index, json in enumerate(descendants)
-        ]
-        
-        await self.mount_all(widgets)
+            # mount 'Replies' label
+            self.mount(FigletWidget('Replies', font="small", classes="page_box figlet"))
+
+            widgets = [
+                TootWidget(name=f"toot_{index}", json=json, classes="page_box toot") 
+                for index, json in enumerate(descendants)
+            ]
+            
+            await self.mount_all(widgets)
 
 class UserProfilePage(Page):
 

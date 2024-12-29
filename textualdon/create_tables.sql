@@ -27,6 +27,7 @@ INSERT INTO settings (name, value) VALUES
 ('show_on_startup', 'login_page'),
 ('show_images', 'True'),
 ('link_behavior', '0'),
+('copypaste_engine', '0'),
 ('hatching', 'none'),
 ('warning_checkbox_wsl', 'False'),
 ('warning_checkbox_first', 'False'),

@@ -7,21 +7,21 @@ import time
 
 # Third party imports
 import clipman
+import pyperclip
 import PIL.Image
-from textual_imageview.viewer import ImageViewer
 
 # Textual imports
 from textual import on
-from textual import events
 from textual.binding import Binding
 from textual.screen import Screen, ModalScreen
 from textual.containers import Container, Horizontal, VerticalScroll
-from textual.widgets import Button, Label, Checkbox, TextArea
+from textual.widgets import Button, Label, Checkbox, TextArea, Markdown
 
 # TextualDon imports
 from textualdon.simplebutton import SimpleButton
-from textualdon.messages import CallbackCancel
+from textualdon.messages import CallbackCancel, OpenRoadmap
 from textualdon.sql import SQLite       # this is only for casting purposes
+from textualdon.imageviewer import ImageViewer
 
 class TextualdonModalScreen(ModalScreen):
 
@@ -41,7 +41,11 @@ class TextualdonModalScreen(ModalScreen):
 
     def on_mount(self):
         self.mount(
-            Container(Label(self.controls, classes='screen_label'), classes='screen_container wide help')
+            Container(
+                Label(self.controls, classes='screen_label'),
+                classes='screen_container wide help',
+                id="help_container"
+            )
         )        
 
     def action_focus_previous(self):
@@ -52,10 +56,8 @@ class TextualdonModalScreen(ModalScreen):
 
 
 class ImageScreen(Screen):
-    """Called by `ImageViewerWidget.on_click` (widgets.py)
+    """Called by `ImageViewerWidget.fullscreen` (widgets.py)
     Callback: None."""
-    #! TODO the on_click usage in ImageViewerWidget needs fixing.
-    # TODO Add keyboard controls for this.
 
     BINDINGS = [
         Binding("escape", "dismiss", key_display='Esc', description="Close the image screen."),
@@ -151,8 +153,8 @@ class NotImplementedScreen(TextualdonModalScreen):
     """ Generic screen used in three places. | Callbacks: None \n
     Called by:
     - `TootBox.search_mode` (tootbox.py)
-    - `TootOptionsOtherUser.report_user` (tootoptions.py) 
-    - `TootOptionsOtherUser.filter_toot` (tootoptions.py)"""
+    - `TootOptionsOtherUser.report_user` (tootscreens.py) 
+    - `TootOptionsOtherUser.filter_toot` (tootscreens.py)"""
 
     controls = "Arrow keys (or tab): navigate | Enter: select | Esc or click anywhere: close"
 
@@ -168,14 +170,20 @@ class NotImplementedScreen(TextualdonModalScreen):
                 ), classes='screen_label'
             )
             with Horizontal(classes='screen_buttonbar'):
-                yield Button('Close', id='close_button')               
+                yield Button('Close', id='close_button')
+                yield Button('View Roadmap', id='roadmap_button')               
 
     def on_click(self):
         self.dismiss()
 
     @on(Button.Pressed, selector='#close_button')
     def report_close(self):
-        self.dismiss()    
+        self.dismiss()  
+
+    @on(Button.Pressed, selector='#roadmap_button')
+    def roadmap_button(self):
+        self.app.post_message(OpenRoadmap())
+        self.dismiss()
 
 
 class WSLWarning(TextualdonModalScreen):
@@ -380,39 +388,58 @@ class CopyPasteTester(TextualdonModalScreen):
     """Called by `Settings.open_tester_screen` (settings.py)
     Callback: None."""
 
-    instructions = """This will test if 'Clipman' is working on your system. \n
+    instructions = """This will help determine which copy/paste engine works best
+on your system. \n
 Use a program like Notepad to write some text, and copy \
 that text to your clipboard. Then write the exact same text in the box below, \
 (or try to paste it), and press the test button. \n
 The app will attempt to access your copy-paste buffer and see if it matches \
 what you entered.
 
-If above you see 'Internal test failed', it means TextualDon is not using Clipman. It \
-will fall back to its default copy/paste system, and this test is guaranteed \
-to fail. You may still be able to copy-paste, but we cannot test it directly.
-You will need to simply try it and see if it works for you.\n"""
+If above you see 'Internal test failed' on either one, There's a good chance it won't \
+work, and you should use one of the other options. \n
+Note the app will attempt to use whatever engine you set, regardless of the test results.\n"""
 
     def compose(self):
 
         if self.app.clipman_works:
-            status = "Status: [green]Internal test passed[/green]\n"
+            clipman_status = "Clipman: [green]Internal test passed[/green]\n"
         else:
-            status = "Status: [red]Internal test failed[/red]\n"
+            clipman_status = "Clipman: [red]Internal test failed[/red]\n"
+        if self.app.pyperclip_works:
+            pyperclip_status = "Pyperclip: [green]Internal test passed[/green]\n"
+        else:
+            pyperclip_status = "Pyperclip: [red]Internal test failed[/red]\n"
+
+        if self.app.copypaste_engine == 0:
+            engine_status = "Current engine: Textual default\n"
+        elif self.app.copypaste_engine == 1:
+            engine_status = "Current engine: Pyperclip\n"
+        elif self.app.copypaste_engine == 2:
+            engine_status = "Current engine: Clipman\n"
 
         with VerticalScroll(classes='fullscreen'):
             with Container(classes='fullscreen container bordered_primary'):
-                yield Label(status, classes='screen_label')
+                yield Label(clipman_status, classes='screen_label h1')
+                yield Label(pyperclip_status, classes='screen_label h1')
                 yield Label(self.instructions, classes='screen_label')
+                yield Label(engine_status, classes='screen_label')
                 yield TextArea(id="test_box", classes="link_box")
-                yield Label('', id='test_label', classes='screen_label')
-                yield SimpleButton("Test", id='test_button', classes='screen_button tall')
+                yield Label('', id='test_label', classes='screen_label h2')
+                yield Label(
+                    "Note: Textual default can't be tested directly. \n Just try it out and see if it works.", 
+                    classes='screen_label'
+                )
                 with Horizontal(classes='screen_buttonbar'):
-                    yield Button('Close', id='close_button')
+                    yield Button("Test Clipman", id='clipman_test_button', classes='screen_button')
+                    yield Button("Test Pyperclip", id='pyperclip_test_button', classes='screen_button')
+                    yield Button('Close', id='close_button', classes='screen_button')
 
-    @on(SimpleButton.Pressed, selector='#test_button')
-    def run_test(self):
+    @on(Button.Pressed, selector='#clipman_test_button')
+    def run_clipman_test(self):
 
         test_text = self.query_one('#test_box').text
+        paste_text = None
         try:
             paste_text = clipman.paste()
         except Exception as e:
@@ -420,10 +447,28 @@ You will need to simply try it and see if it works for you.\n"""
             # Because this is a test box, we want to silence the error.
 
         if test_text == paste_text:
-            self.query_one('#test_label').update('[green]Test passed.[/green]')
+            self.query_one('#test_label').update('[green]Clipman test passed.[/green]')
             self.app.notify("Copy/Paste test successful.")
         else:
-            self.query_one('#test_label').update('[red]Test failed.[/red]')
+            self.query_one('#test_label').update('[red]Clipman test failed.[/red]')
+            self.app.notify("Copy/Paste test failed.")
+
+    @on(Button.Pressed, selector='#pyperclip_test_button')
+    def run_pyperclip_test(self):
+
+        test_text = self.query_one('#test_box').text
+        paste_text = None
+        try:
+            paste_text = pyperclip.paste()
+        except Exception as e:
+            self.log.error(e)
+            # Because this is a test box, we want to silence the error.
+
+        if test_text == paste_text:
+            self.query_one('#test_label').update('[green]Pyperclip test passed.[/green]')
+            self.app.notify("Copy/Paste test successful.")
+        else:
+            self.query_one('#test_label').update('[red]Pyperclip test failed.[/red]')
             self.app.notify("Copy/Paste test failed.")
 
     @on(Button.Pressed, selector='#close_button')
@@ -449,6 +494,29 @@ class MessageScreen(TextualdonModalScreen):
     def compose(self):
         with Container(classes='screen_container wide'):
             yield Label(self.message, classes='screen_label')
+
+    def on_click(self):
+        self.dismiss()
+
+class RoadmapScreen(TextualdonModalScreen):
+
+    BINDINGS = [
+        Binding("enter", "dismiss", description="Close the pop-up screen.", show=True),
+    ]
+    controls = "Press enter, esc, or click anywhere to close."
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        with open('Roadmap.md', 'r') as f:
+            self.roadmap = f.read()
+
+    def compose(self):
+        with VerticalScroll(classes='fullscreen'):
+            yield Markdown(self.roadmap, classes='fullscreen container bordered_primary')
+
+    def on_mount(self):
+        self.query_one(VerticalScroll).focus()
 
     def on_click(self):
         self.dismiss()

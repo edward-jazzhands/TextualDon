@@ -2,6 +2,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, cast, List, Tuple
 import urllib.request
+from datetime import datetime
+
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult 
@@ -10,12 +12,11 @@ if TYPE_CHECKING:
 from mastodon import Mastodon
 from rich.text import Text
 import PIL.Image
-from textual_imageview.viewer import ImageViewer    # takes PIL.Image.Image as only argument
 
 # Textual imports
 from textual import on, work
-from textual.reactive import reactive
-from textual.dom import NoScreen
+# from textual.reactive import reactive
+# from textual.dom import NoScreen
 from textual.worker import Worker, WorkerState
 from textual.binding import Binding
 from textual.message import Message
@@ -25,14 +26,15 @@ from textual.widgets import (
     Sparkline,
     Pretty,
     Static,
-    TextArea,
+    # TextArea,
     Input,
 )
 
 # TextualDon imports
 from textualdon.screens import ImageScreen, MessageScreen, NotImplementedScreen
 from textualdon.simplebutton import SimpleButton
-from textualdon.messages import ScrollToWidget
+# from textualdon.messages import ScrollToWidget
+from textualdon.imageviewer import ImageViewer    # takes PIL.Image.Image as only argument
 
 
 class InputCustom(Input):
@@ -183,13 +185,35 @@ class TimelineSelector(Widget):
         self.screen.focus_next()
 
 
+class MiscMastoWidget(Widget):
 
-class HashtagWidget(Container):
+
+    def on_focus(self):
+        self.log.debug(f"{self.name} focused. ")
+        self.styles.border = ('dashed', self.app.theme_variables["primary"])
+
+    def on_blur(self):
+        self.styles.border = ('blank', 'transparent')
+
+
+    def get_days_of_week(self):
+        # Get the current day of the week
+        current_day = datetime.now().strftime("%a")
+        day_list = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        day_codes = ["M", "T", "W", "T", "F", "S", "S"]
+        index = day_list.index(current_day)
+        if index == 6:
+            return " ".join(day_codes)
+        else:
+            my_days = day_codes[index+1:] + day_codes[:index+1]
+            return " ".join(my_days)
+
+
+class HashtagWidget(MiscMastoWidget):
 
     BINDINGS = [
         Binding("enter", "switch_to_hashtagpage", "Expand hashtag", show=True),
     ]
-
 
     def __init__(self, json: dict, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -198,12 +222,11 @@ class HashtagWidget(Container):
     def compose(self):
         with Container(classes="content_container"):
             yield SimpleButton("hashtag", id="hashtag_name", classes="titlebar")
-            # yield Static("following", id="hashtag_following")
             with Horizontal(classes="trend_footer"):
-                yield Static("history", id="hashtag_history", classes="trend_footer_nums")
-                with Vertical(classes="sparkline_container"):
-                    yield Sparkline([0], id="hashtag_sparkline")
-                    yield Static("Weekly Trend", classes="trend_label")
+                yield Static("history", id="hashtag_history", classes="trend_footer nums")
+                with Vertical(classes="trend_footer sparkline"):
+                    yield Sparkline([0], id="hashtag_sparkline", classes="sparkline")
+                    yield Static(self.get_days_of_week(), classes="trend_label")
 
     def on_mount(self):
 
@@ -214,7 +237,6 @@ class HashtagWidget(Container):
 
         self.query_one("#hashtag_name").update(f"#{self.json['name']}")
         self.query_one("#hashtag_name").tooltip = self.json["url"]
-        # self.query_one("#hashtag_following").update(f"Following: {self.json["following"]}")
         self.query_one("#hashtag_history").update(
                     f"{past_2_days} people in the past 2 days. \n"
                     f"{past_week} people in the past week.")
@@ -222,18 +244,15 @@ class HashtagWidget(Container):
 
         self.loading = False
 
-    def on_focus(self):
-        self.log.debug(f"{self.name} focused. ")
-        self.styles.border = ('dashed', self.app.theme_variables["primary"])
-
-    def on_blur(self):
-        self.styles.border = ('blank', 'transparent')
-
     def action_switch_to_hashtagpage(self):
-        self.app.push_screen(NotImplementedScreen("Hashtag page"))
+        self.app.push_screen(NotImplementedScreen("More pages"))
 
 
-class NewsWidget(Container):
+class NewsWidget(MiscMastoWidget):
+
+    BINDINGS = [
+        Binding("enter", "switch_to_newspage", "Expand news story", show=True),
+    ]
 
     def __init__(self, json: dict, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -253,11 +272,11 @@ class NewsWidget(Container):
             yield Static("date", id="news_date")
             yield Static("provider", id="news_provider")
 
-            with Horizontal(classes="trend_footer"):
-                yield Static("history", id="news_history", classes="trend_footer_nums")
-                with Vertical(classes="sparkline_container"):
-                    yield Sparkline([0], id="news_sparkline")
-                    yield Static("Weekly Trend", classes="trend_label")
+            with Horizontal(classes="trend_footer news"):
+                yield Static("history", id="news_history", classes="trend_footer nums")
+                with Vertical(classes="trend_footer sparkline"):
+                    yield Sparkline([0], id="news_sparkline", classes="sparkline")
+                    yield Static(self.get_days_of_week(), classes="trend_label")
 
     def on_mount(self):
 
@@ -281,12 +300,8 @@ class NewsWidget(Container):
 
         self.loading = False
 
-    def on_focus(self):
-        self.log.debug(f"{self.name} focused. ")
-        self.styles.border = ('dashed', self.app.theme_variables["primary"])
-
-    def on_blur(self):
-        self.styles.border = ('blank', 'transparent')
+    def action_switch_to_newspage(self):
+        self.app.push_screen(NotImplementedScreen("More pages"))
 
 
 # TODO Make PeopleWidget
@@ -348,7 +363,7 @@ class ImageViewerWidget(Container):
             self.log(Text(f"Worker {event.worker.name} was cancelled", style="yellow"))
 
 
-class ProfileWidget(Container):
+class ProfileWidget(MiscMastoWidget):
     """Displays a user's profile. Used by the UserProfilePage class."""
 
     def __init__(self, account_dict, relation_dict, *args, **kwargs) -> None:
@@ -362,44 +377,3 @@ class ProfileWidget(Container):
 
     def on_mount(self):
         self.mastodon = cast(Mastodon, self.app.mastodon)
-
-
-class NestedTextArea(TextArea):
-
-    class Submit(Message):
-        pass
-
-    BINDINGS = [
-        Binding("ctrl+e", "submit", "Submit edit", show=True),
-        Binding("escape", "cancel", "Cancel edit", key_display='Esc', show=True),
-    ]
-
-    def on_mount(self):
-        self.focus()
-
-    def focus(self, scroll_visible: bool = True):
-        """Copied from Widget.focus() but with scroll_visible set to False."""
-
-        try:
-            self.screen.set_focus(self, scroll_visible=False)
-        except NoScreen:
-            pass
-
-        self.post_message(ScrollToWidget(self))
-        self.parent.parent.toot_widget.on_focus()
-
-        return self
-
-    def on_focus(self):
-        self.parent.parent.toot_widget.on_focus()
-
-    def on_blur(self):
-        self.parent.parent.toot_widget.on_blur()
-
-    def action_submit(self):
-        self.post_message(self.Submit())
-
-    async def action_cancel(self):
-        await self.parent.parent.toot_widget.reply_to_toot()
-
-

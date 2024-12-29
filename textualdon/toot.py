@@ -34,9 +34,9 @@ from textualdon.simplebutton import SimpleButton
 from textualdon.widgets import ImageViewerWidget
 from textualdon.tootbox import TootBox
 from textualdon.messages import (
-    UpdateBannerMessage,
     ExamineToot,
     ScrollToWidget,
+    SuperNotify
 )
 from textualdon.bs4_parser import BS4Parser
 from textualdon.screens import ConfirmationScreen
@@ -334,9 +334,11 @@ class TootWidget(Horizontal):
 
         async def refresh_internal():
 
+            json = None
             with self.app.capture_exceptions():
-                self.json = await self.mastodon.status(self.toot_id)
-                if not self.app.error:
+                json = await self.mastodon.status(self.toot_id)
+                if json:
+                    self.json = json
                     self.call_after_refresh(self.load_toot_data)
                     self.call_after_refresh(self.toot_content_container.load_toot_content)
         self.set_timer(delay, refresh_internal)   # half second delay to give server time to refresh.
@@ -686,9 +688,13 @@ class TootOptionHandler(Widget):
             attribute = getattr(self.app.mastodon, action)
         if self.app.error:
             return
-        elif attribute:
+        if attribute:
 
-            status = await attribute(id_to_action)
+            status = None
+            with self.app.capture_exceptions():
+                status = await attribute(id_to_action)
+            if self.app.error:
+                return
             if status:
 
                 self.log.debug(
@@ -697,14 +703,11 @@ class TootOptionHandler(Widget):
                 )
                 if isinstance(status, dict):
                     if key and status[key] != toggle_status:  # check returned dict is different from ingoing status
-                        self.post_message(UpdateBannerMessage(success_message))
-                        self.notify(success_message)
+                        self.post_message(SuperNotify(success_message))
                     if not key:
-                        self.post_message(UpdateBannerMessage(success_message))
-                        self.notify(success_message)
+                        self.post_message(SuperNotify(success_message))
                 else:
-                    self.post_message(UpdateBannerMessage(failure_message))
-                    self.notify(failure_message)
+                    self.post_message(SuperNotify(failure_message))
                 
                 if action == "status_delete":
                     return
@@ -732,16 +735,7 @@ class TextAreaEdit(TextArea):
         except NoScreen:
             pass
 
-        self.post_message(ScrollToWidget(self))
-        self.parent.toot_widget.on_focus()
-
         return self
-
-    def on_focus(self):
-        self.parent.toot_widget.on_focus()
-
-    def on_blur(self):
-        self.parent.toot_widget.on_blur()
 
     def action_submit(self):
         self.post_message(self.Submit())
@@ -772,7 +766,8 @@ class TootEditContainer(Container):
         self.input_box = cast(TextArea, self.query_one("#toot_edit_box"))
 
     def edit_toot(self) -> None:
-        self.input_box.can_focus = True    # ability to focus is turned off for everything in toot by default
+
+        self.input_box.can_focus = True    # this has to be here and not in on_mount.      
         self.content = self.toot_widget.toot_content_container.parsed_content
         self.set_timer(self.app.text_insert_time, self.set_content)   # to solve text glitching
 
@@ -780,12 +775,13 @@ class TootEditContainer(Container):
         self.input_box.text = self.content
         self.input_box.focus()
         self.input_box.action_cursor_line_end()
+        self.app.post_message(ScrollToWidget(self.input_box))
 
 
     @on(TextAreaEdit.Submit)
     @on(SimpleButton.Pressed, selector="#toot_edit_save")
     async def save_edit(self) -> None:
-        # I'm pretty sure I did this because the arguments here are too different
+        # I did this because the arguments here are too different
         # from the normal option handler to justify using it.
 
         with self.app.capture_exceptions():
@@ -855,7 +851,7 @@ class TootCardWidget(Vertical):
 
         self.app.handle_link(self.card_json["url"])
 
-
+    # This is a trick to make it light up the entire card and all children on hover.
     def on_enter(self):
         self.styles.background = self.app.theme_variables["panel-lighten-1"]
 

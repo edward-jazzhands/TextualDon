@@ -84,7 +84,6 @@ class OpenCallbackScreen(Message):
         self.auth_url = auth_url
         super().__init__()
 
-
 class CallbackSuccess(Message):
     """ ``` \n
     from textualdon.messages import CallbackSuccess
@@ -99,12 +98,10 @@ class CallbackCancel(Message):
     ``` """
     pass
 
-
 class ScrollToWidget(Message):
     def __init__(self, widget: Widget) -> None:
         super().__init__()
         self.widget = widget
-
 
 class EnableSafeMode(Message):
     pass
@@ -118,4 +115,7 @@ class ExceptionMessage(Message):
         self.exception = exception
 
 class DeleteLogs(Message):
+    pass
+
+class OpenRoadmap(Message):
     pass

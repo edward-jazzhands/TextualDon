@@ -359,13 +359,13 @@ class UserPopup(TextualdonModalScreen):
                 yield SimpleButton(
                     'Follow',
                     id='user_follow_button',
-                    classes='popup_button padding',
+                    classes='screen_button',
                     disabled=self.disable_follow
                 )
                 yield SimpleButton(
                     'Go to Profile',
                     id='go_to_profile_button',
-                    classes='popup_button padding',
+                    classes='screen_button',
                 )             
 
     def on_mount(self):

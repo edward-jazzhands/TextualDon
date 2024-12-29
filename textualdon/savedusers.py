@@ -198,6 +198,7 @@ class SavedUsersManager(Widget):
                 access_token = access_token,
                 api_base_url = instance_url,
                 version_check_mode='none',
+                request_timeout=3
             )          
         except Exception as e:
             e.add_note("SavedUsersManager.create_mastodon_instance failed to create Mastodon object.")
@@ -292,12 +293,6 @@ class SavedUsersManager(Widget):
 
     @on(Worker.StateChanged)
     def worker_state_changed(self, event: Worker.StateChanged) -> None:
-
-        self.log.debug(Text(
-                f"Worker.state: {event.worker.state.name}\n"
-                f"Worker.name: {event.worker.name}",
-                style="cyan"
-        ))
 
         if event.state == WorkerState.SUCCESS:
             self.log(Text(f"Worker {event.worker.name} completed successfully", style="green"))
