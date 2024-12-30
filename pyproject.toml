@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "textualdon"
-version = "0.1.4"
+version = "0.1.5"
 description = "A Mastodon client built with the Textual framework"
 authors = ["edward-jazzhands <ed.jazzhands@gmail.com>"]
 license = "MIT"
@@ -14,7 +14,6 @@ python = "^3.12"
 textual = {extras = ["syntax"], version = "^1.0.0"}
 beautifulsoup4 = "^4.12.3"
 mastodon-py = "^1.8.1"
-textual-dev = "^1.6.1"
 platformdirs = "^4.3.6"
 tzlocal = "^5.2"
 clipman = "^3.3.1"
@@ -23,6 +22,9 @@ humanize = "^4.11.0"
 textual-imageview = "^0.1.1"
 pyperclip = "^1.9.0"
 
+
+[tool.poetry.group.dev.dependencies]
+textual-dev = "^1.7.0"
 
 [build-system]
 requires = ["poetry-core"]

@@ -68,8 +68,8 @@ class MastodonProxy(DOMNode):
         attribute = getattr(self.mastodon, 'bookmarks')
         return await self.wrapped_method(attribute, *args, **kwargs)
     
-    async def favorites(self, *args, **kwargs):
-        attribute = getattr(self.mastodon, 'favorites')
+    async def favourites(self, *args, **kwargs):
+        attribute = getattr(self.mastodon, 'favourites')
         return await self.wrapped_method(attribute, *args, **kwargs)
     
     async def status(self, *args, **kwargs):

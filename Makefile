@@ -47,8 +47,13 @@ clean: del-secrets
 	rm -rf build dist
 	find . -name "*.pyc" -delete
 
-build: clean
+# NOTE: Must be activated for build process because of this line:
+update-version:
+	python textualdon/version.py
+
+build: clean update-version
 	poetry build
+	cp Roadmap.md textualdon/
 
 publish: build
 	poetry publish

@@ -245,7 +245,7 @@ class HashtagWidget(MiscMastoWidget):
         self.loading = False
 
     def action_switch_to_hashtagpage(self):
-        self.app.push_screen(NotImplementedScreen("More pages"))
+        self.app.push_screen(NotImplementedScreen("More pages", classes="modal_screen"))
 
 
 class NewsWidget(MiscMastoWidget):
@@ -301,7 +301,7 @@ class NewsWidget(MiscMastoWidget):
         self.loading = False
 
     def action_switch_to_newspage(self):
-        self.app.push_screen(NotImplementedScreen("More pages"))
+        self.app.push_screen(NotImplementedScreen("More pages", classes="modal_screen"))
 
 
 # TODO Make PeopleWidget

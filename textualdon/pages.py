@@ -33,6 +33,7 @@ from textualdon.widgets import WelcomeWidget
 from textualdon.simplebutton import SimpleButton
 from textualdon.messages import UpdateBannerMessage, SuperNotify, SwitchMainContent
 from textualdon.screens import NotImplementedScreen
+from textualdon.version import __version__
 
 
 class PageHeader(Horizontal):
@@ -294,7 +295,7 @@ class BookmarksPage(Page):
 
 class FavoritesPage(Page):
 
-    timeline = "favorites"
+    timeline = "favorites"      # NOTE: Yes I am aware of the American/British spelling difference.
     
     def compose(self) -> ComposeResult:
         yield PageHeader(self.timeline)
@@ -419,7 +420,7 @@ class AboutPage(Container):
     def compose(self):
         self.git_repo = "http://www.github.com/edward-jazzhands/textualdon"
 
-        about_text = f"""TextualDon {self.app.textualdon_version} \
+        about_text = f"""TextualDon {__version__} \
 - by Edward Jazzhands © Copyright 2024 \n
 TextualDon is a Mastodon client built with the Textual framework for Python. \n
 It is a work in progress and is not yet feature complete. \n"""

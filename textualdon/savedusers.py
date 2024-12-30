@@ -106,7 +106,8 @@ class SavedUsersManager(Widget):
     users_list = []
 
     class TriggerLogin(Message):
-        """Message to trigger the login_stage5 function."""
+        """Message to trigger the login_stage5 function.
+        Posted when user is selected. Handled by parent Oauth widget."""
         def __init__(self, instance_url: str) -> None:
             super().__init__()
             self.instance_url = instance_url
@@ -129,41 +130,34 @@ class SavedUsersManager(Widget):
         user_deleted function in this class to refresh the list."""
 
         with self.app.capture_exceptions():
-            users_list = await self.get_saved_logins()
+            users_list = self.get_saved_logins()
         if self.app.error:
             return
         else:
             self.log.debug("Saved users list successfully retrieved.")
-            if users_list:
-                self.users_list = users_list
-                await self.mount_saved(users_list)
+            self.users_list = users_list
+            await self.mount_saved(users_list)
 
-    async def get_saved_logins(self) -> List[UserEntry]:
+    def get_saved_logins(self) -> List[UserEntry]:
 
         self.log("Starting get_saved_logins in OAuthWidget")
 
         query = "SELECT * FROM users"
         users = self.db.fetchall(query)     #~ This is the point we query the database to get all the user data.
-
-        users_list = []
-
+        self.log(Text(f"Users found in database: {len(users)}", style="green"))
         if users:
-            self.log(Text(f"Users found in database: {len(users_list)}", style="green"))
-            for user in users:
-                user_id = user[0]
-                instance_url = user[1]
-                username = user[2]
-                display_name = user[3]
-                access_token = user[4]
-
-                user_entry = UserEntry(user_id, instance_url, username, display_name, access_token)
-                users_list.append(user_entry)
-        return users_list
+            return [UserEntry(user[0], user[1], user[2], user[3], user[4]) for user in users]
+            # (0 = user_id), (1 = instance_url), (2 = username), (3 = display_name), (4 = access_token)
+        else:
+            return []
 
     async def mount_saved(self, users_list: List[UserEntry]) -> None:
 
         await self.users_container.remove_children()
-        self.users_container.mount_all(users_list)
+        if users_list:
+            await self.users_container.mount_all(users_list)
+        else:
+            await self.users_container.mount(Static("No saved logins", classes="users_placeholder"))
         self.users_container.refresh(layout=True)
 
     def check_auto_login(self) -> None:
