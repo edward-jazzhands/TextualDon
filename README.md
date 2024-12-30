@@ -1,7 +1,7 @@
 # TextualDon
 A Mastodon client built with the Textual framework for Python.
 
-### Current version: 0.1.6
+### Current version: 0.1.7
 
 ![Demo Image](https://raw.githubusercontent.com/edward-jazzhands/textualdon/refs/heads/master/media/graphic1.png)
 
