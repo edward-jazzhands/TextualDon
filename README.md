@@ -1,7 +1,7 @@
 # TextualDon
 A Mastodon client built with the Textual framework for Python.
 
-### Current version: 0.1.5
+### Current version: 0.1.6
 
 ![Demo Image](https://raw.githubusercontent.com/edward-jazzhands/textualdon/refs/heads/master/media/graphic1.png)
 
@@ -10,6 +10,8 @@ TextualDon aims to be a full-featured, graphical Mastodon client that lives insi
 It offers a new take on 'social media in the terminal' compared to other apps. 
 TextualDon leverages the full power of Textual to provide an almost website-like 
 experience in a keyboard-centric, TUI format.
+
+## Demo Video:
 
 https://github.com/user-attachments/assets/469ac812-61fd-4042-8448-fc800cdd1746
 
