@@ -11,6 +11,8 @@ It offers a new take on 'social media in the terminal' compared to other apps.
 TextualDon leverages the full power of Textual to provide an almost website-like 
 experience in a keyboard-centric, TUI format.
 
+https://github.com/user-attachments/assets/469ac812-61fd-4042-8448-fc800cdd1746
+
 ## Get started:
 
 Fast-start for uv users:
